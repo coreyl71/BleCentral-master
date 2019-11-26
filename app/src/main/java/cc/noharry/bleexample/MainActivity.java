@@ -41,7 +41,11 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.UnsupportedEncodingException;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -195,6 +199,10 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                     });
 
                     gatt.discoverServices();
+//                    if (Build.VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
+//                        gatt.requestMtu(5120);
+//                    }
+
                 } else {
                     mTvConnState.setText(newState);
                 }
@@ -245,6 +253,15 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             @Override
             public void onCharacteristicChanged(BluetoothGatt gatt,
                                                 final BluetoothGattCharacteristic characteristic) {
+
+                //开启notify之后，我们就可以在这里接收数据了。
+                //分包处理数据
+//                btBuffer.appendBuffer(characteristic.getValue());
+//                while (true){
+//                    boolean ret = subPackageOnce(btBuffer);
+//                    if (false == ret) break;
+//                }
+
                 L.i("onCharacteristicChanged value:" + byte2HexStr(characteristic.getValue()));
                 runOnUiThread(new Runnable() {
                     @Override
@@ -269,6 +286,36 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             }
         };
     }
+
+//    private boolean subPackageOnce(BluetoothBuffer buffer) {
+//        if (null == buffer) return false;
+//        if (buffer.getBufferSize() >= 14) {
+//            byte[] rawBuffer =  buffer.getBuffer();
+//            //求包长
+//            if (isHead(rawBuffer)){
+//                pkgSize = byteToInt(rawBuffer[2], rawBuffer[3]);
+//            }else {
+//                pkgSize = -1;
+//                for (int i = 0; i < rawBuffer.length-1; ++i){
+//                    if (rawBuffer[i] == -2 && rawBuffer[i+1] == 1){
+//                        buffer.releaseFrontBuffer(i);
+//                        return true;
+//                    }
+//                }
+//                return false;
+//            }
+//            //剥离数据
+//            if (pkgSize > 0 && pkgSize <= buffer.getBufferSize()) {
+//                byte[] bufferData = buffer.getFrontBuffer(pkgSize);
+//                long time = System.currentTimeMillis();
+//                buffer.releaseFrontBuffer(pkgSize);
+//                //在这处理数据
+////                deal something。。。。。
+//                return true;
+//            }
+//        }
+//        return false;
+//    }
 
     private void initEvent() {
         mBtnScan.setOnClickListener(this);
@@ -300,47 +347,62 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
     private ByteBuf buffer = Unpooled.buffer(1024 * 1000);
 
+    @RequiresApi(api = VERSION_CODES.KITKAT)
     @Override
     public void onClick(View v) {
+
         switch (v.getId()) {
+
             case R.id.btn_scan:
                 scan();
                 break;
+
             case R.id.btn_stop_scan:
                 stopScan();
                 break;
+
             case R.id.btn_connect:
                 if (mBluetoothDevice != null) {
                     connect(mBluetoothDevice);
                 }
                 break;
+
             case R.id.btn_disconnect:
                 disConnect();
                 break;
+
             case R.id.btn_read:
                 read();
                 break;
+
             case R.id.btn_write:
+
                 String data = mEtWrite.getText().toString().trim();
                 if (TextUtils.isEmpty(data)) {
                     Toast.makeText(MainActivity.this, "请输入发送内容", Toast.LENGTH_SHORT).show();
                     break;
                 }
-                byte[] dataBytes = data.getBytes();
 
-//        ByteBuf
-
-                write(dataBytes);
+                // 字符串转换成 Byte 数组
+                byte[] dataBytes = data.getBytes(StandardCharsets.UTF_8);
+                // 数据分包
+                subpackageByte(dataBytes);
+//                write(dataBytes);
                 break;
+
             case R.id.btn_notify:
                 enableNotify();
                 break;
+
             case R.id.btn_disable_notify:
                 disableNotify();
                 break;
+
             default:
         }
     }
+
+
 
     /************************************蓝牙操作相关 开始*********************************************/
 
@@ -416,6 +478,9 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
     private void connect(BluetoothDevice device) {
         L.i("device.name = " + device.getName());
         mBluetoothGatt = device.connectGatt(this, false, mBluetoothGattCallback);
+//        if (Build.VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
+//            mBluetoothGatt.requestMtu(512);
+//        }
     }
 
 //  private final static String TAG = MainActivity.class.getSimpleName();
@@ -472,12 +537,145 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         }
     }
 
+    private boolean isWritingEntity;
+    // 当前是否为自动写入模式
+    private boolean isAutoWriteMode = false;
+    // 最后一包是否自动补零
+    private final boolean lastPackComplete = false;
+    private int packLength = 20;
+    private final Object lock = new Object();
+
+    private HashSet<Integer> resIdSets = new HashSet<>();
+
+    /**
+     * 数据分包
+     * @param data 数据源
+     */
+    private void subpackageByte(byte[] data) {
+
+        isWritingEntity = true;
+        int index = 0;
+        int length = data.length;
+        int availableLength = length;
+
+        while (index < length) {
+
+            if (!isWritingEntity){
+                L.e("写入取消");
+            }
+
+            // 每包大小为 20
+            int onePackLength = packLength;
+            //最后一包不足数据字节不会自动补零
+            if (!lastPackComplete) {
+                onePackLength = (availableLength >= packLength ? packLength : availableLength);
+            }
+
+            byte[] txBuffer = new byte[onePackLength];
+
+            txBuffer[0] = 0x00;
+            for (int i = 0; i < onePackLength; i++){
+                if(index < length){
+                    txBuffer[i] = data[index++];
+                }
+            }
+
+            availableLength -= onePackLength;
+
+            // 单个数据包发送
+            boolean result = write(txBuffer);
+
+            if(!result) {
+//                if(mBleEntityLisenter != null) {
+//                    mBleEntityLisenter.onWriteFailed();
+                    isWritingEntity = false;
+                    isAutoWriteMode = false;
+//                    return false;
+//                }
+            } else {
+//                if (mBleEntityLisenter != null) {
+                    double progress = new BigDecimal((float)index / length).setScale(2, BigDecimal.ROUND_HALF_UP).doubleValue();
+//                    mBleEntityLisenter.onWriteProgress(progress);
+//                }
+            }
+
+//            if (autoWriteMode) {
+//                synchronized (lock) {
+//                    try {
+////                        lock.wait(500);
+//                        lock.wait();
+//                    } catch (InterruptedException e) {
+//                        e.printStackTrace();
+//                    }
+//                }
+//            } else {
+                try {
+                    Thread.sleep(100L);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+//            }
+        }
+
+        // 这里写入完成
+//        if(mBleEntityLisenter != null){
+//            mBleEntityLisenter.onWriteSuccess();
+//            isWritingEntity = false;
+//            isAutoWriteMode = false;
+//        }
+//        return true;
+        L.e("写入完成");
+
+    }
+
+    public static byte[] prepareOutFrame(int msgid, byte frametype, String msg) {
+        //512  1024  2048  4096  12288
+        int buffer_size = msg.getBytes().length + 10;
+        byte[] utf8StringContent;
+        byte[] frame = new byte[buffer_size];
+        frame[0] = BFrameConst.FRAME_HEAD; //(byte)0xFF
+        frame[4] = frametype;
+        //5-8
+        //消息id
+        byte[] msgIdByte = int2byte(msgid);
+        //MESSAGE_ID_LENGTH=4
+
+        //content
+        L.d("prepareOutFrame  msgid : " + msgid);
+        L.d("prepareOutFrame  frametype : " + frametype);
+        L.d("prepareOutFrame  msg : " + msg);
+        try {
+            utf8StringContent = msg.getBytes("utf-8");
+
+            System.arraycopy(msgIdByte, 0, frame, 5, BFrameConst.MESSAGE_ID_LENGTH);
+            System.arraycopy(utf8StringContent, 0, frame, 9, utf8StringContent.length);
+        } catch (UnsupportedEncodingException e) {
+            L.d("UnsupportedEncodingException  " + e.toString());
+            e.printStackTrace();
+            // return;
+        }
+        frame[buffer_size - 1] = BFrameConst.FRAME_END;//(byte)0x00;
+        return frame;
+
+    }
+
+    public static byte[] int2byte(int res) {
+        byte[] targets = new byte[4];
+
+        targets[3] = (byte) (res & 0xff);// 最低位
+        targets[2] = (byte) ((res >> 8) & 0xff);// 次低位
+        targets[1] = (byte) ((res >> 16) & 0xff);// 次高位
+        targets[0] = (byte) (res >>> 24);// 最高位,无符号右移。
+        return targets;
+    }
+
     /**
      * 写特征
      *
      * @param data 最大20byte
      */
-    private void write(byte[] data) {
+    private boolean write(byte[] data) {
+        boolean result = false;
         if (mBluetoothGatt != null && mCharacteristic != null) {
             L.i("开始写 uuid：" + mCharacteristic.getUuid().toString() + " hex:" + byte2HexStr(data) + " str:" + new String(data));
 
@@ -486,16 +684,20 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             mCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
 
             mCharacteristic.setValue(data);
-            mBluetoothGatt.writeCharacteristic(mCharacteristic);
+            result = mBluetoothGatt.writeCharacteristic(mCharacteristic);
+
         } else {
             L.e("写失败");
         }
+        return result;
     }
 
     /**
      * 开启通知
      */
     private void enableNotify() {
+        L.e("mBluetoothGatt = " + mBluetoothGatt);
+        L.e("mCharacteristic = " + mCharacteristic);
         if (mBluetoothGatt != null && mCharacteristic != null) {
             BluetoothGattDescriptor descriptor = mCharacteristic
                     .getDescriptor(CLIENT_CHARACTERISTIC_CONFIG_DESCRIPTOR_UUID);
