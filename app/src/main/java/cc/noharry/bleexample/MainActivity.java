@@ -32,6 +32,7 @@ import android.support.annotation.RequiresApi;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
+import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
@@ -112,9 +113,13 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             return;
         }
 
+        // 找控件
         initView();
+        // 设置回调
         initCallback();
+        // 设置点击事件监听
         initEvent();
+        // 权限校验
         checkPermission();
     }
 
@@ -542,6 +547,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
     private boolean isAutoWriteMode = false;
     // 最后一包是否自动补零
     private final boolean lastPackComplete = false;
+    // 每个包固定长度 20，包括头、尾、msgId
     private int packLength = 20;
     private final Object lock = new Object();
 
@@ -554,32 +560,66 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
     private void subpackageByte(byte[] data) {
 
         isWritingEntity = true;
+        // 数据源数组的指针
         int index = 0;
-        int length = data.length;
-        int availableLength = length;
+        // 数据总长度
+        int dataLength = data.length;
+        // 待传数据有效长度，最后一个包是否需要补零
+        int availableLength = dataLength;
+        // 给每个数据分包一个消息 ID，递增
+        int msgId = 1000;
 
-        while (index < length) {
+        while (index < dataLength) {
 
             if (!isWritingEntity){
                 L.e("写入取消");
             }
 
-            // 每包大小为 20
-            int onePackLength = packLength;
-            //最后一包不足数据字节不会自动补零
+            // 每包数据内容大小为 14
+            int onePackLength = packLength - 6;
+            // 最后一包不足长度不会自动补零
             if (!lastPackComplete) {
-                onePackLength = (availableLength >= packLength ? packLength : availableLength);
+                onePackLength = (availableLength >= (packLength - 6) ? (packLength - 6) : availableLength);
             }
 
-            byte[] txBuffer = new byte[onePackLength];
+            // 实例化一个数据分包，长度为 20
+//            byte[] txBuffer = new byte[onePackLength];
+            byte[] txBuffer = new byte[packLength];
 
-            txBuffer[0] = 0x00;
-            for (int i = 0; i < onePackLength; i++){
-                if(index < length){
+            // 数据包头 (byte)0xFF
+            txBuffer[0] = BFrameConst.FRAME_HEAD;
+            // 数据包尾 (byte)0x00;
+            txBuffer[19] = BFrameConst.FRAME_END;
+
+            // 数据包 [1]-[4] 为 msgId
+            byte[] msgIdByte = int2byte(msgId);
+            msgId++;
+            /**
+             * 数组拷贝
+             * 原数组
+             * 元数据的起始位置
+             * 目标数组
+             * 目标数组的开始起始位置
+             * 要 copy 的数组的长度
+             */
+            System.arraycopy(msgIdByte, 0, txBuffer, 1, BFrameConst.MESSAGE_ID_LENGTH);
+
+            // 数据包 [5]-[18] 为内容
+            for (int i = 5; i < onePackLength + 5; i++){
+                if(index < dataLength){
                     txBuffer[i] = data[index++];
                 }
             }
+            L.i("index = " + index);
+            L.i("onePackLength = " + onePackLength);
+            L.i("dataLength = " + dataLength);
+//            for (int i = 0; i < onePackLength; i++){
+//                if(index < dataLength){
+//                    txBuffer[i] = data[index++];
+//                }
+//            }
 
+            // 更新剩余数据长度
             availableLength -= onePackLength;
 
             // 单个数据包发送
@@ -594,7 +634,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 //                }
             } else {
 //                if (mBleEntityLisenter != null) {
-                    double progress = new BigDecimal((float)index / length).setScale(2, BigDecimal.ROUND_HALF_UP).doubleValue();
+                    double progress = new BigDecimal((float)index / dataLength).setScale(2, BigDecimal.ROUND_HALF_UP).doubleValue();
 //                    mBleEntityLisenter.onWriteProgress(progress);
 //                }
             }
@@ -647,6 +687,13 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         try {
             utf8StringContent = msg.getBytes("utf-8");
 
+            /**
+             * 原数组
+             * 元数据的起始位置
+             * 目标数组
+             * 目标数组的开始起始位置
+             * 要 copy 的数组的长度
+             */
             System.arraycopy(msgIdByte, 0, frame, 5, BFrameConst.MESSAGE_ID_LENGTH);
             System.arraycopy(utf8StringContent, 0, frame, 9, utf8StringContent.length);
         } catch (UnsupportedEncodingException e) {
@@ -828,16 +875,22 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
         @Override
         public void onReceive(Context arg0, Intent intent) {
+
             String action = intent.getAction();
             L.i("action=" + action);
-            if (action.equals(BluetoothAdapter.ACTION_STATE_CHANGED)) {
+
+            if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)) {
+
                 int state = intent
                         .getIntExtra(BluetoothAdapter.EXTRA_STATE, -1);
                 L.i("state=" + state);
+
                 switch (state) {
+
                     case BluetoothAdapter.STATE_TURNING_ON:
                         L.i("ACTION_STATE_CHANGED:  STATE_TURNING_ON");
                         break;
+
                     case BluetoothAdapter.STATE_ON:
                         L.i("ACTION_STATE_CHANGED:  STATE_ON");
                         if (null != btOpenStateListener) {
@@ -845,10 +898,16 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                         }
                         unRegisterBtStateReceiver(MainActivity.this, this);
                         break;
+
                     default:
+                        break;
+
                 }
+
             }
+
         }
+
     }
 
     /*************************************开启蓝牙相关 结束**************************************************/
@@ -872,13 +931,10 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         switch (requestCode) {
             case REQUSET_CODE: {
                 if (grantResults.length > 0
-                        && grantResults[0] == PackageManager.PERMISSION_GRANTED
-                ) {
+                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     L.i("权限请求成功");
-
                 } else {
                     L.i("权限请求失败");
-
                 }
                 return;
             }
