@@ -268,6 +268,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 //                }
 
                 L.i("onCharacteristicChanged value:" + byte2HexStr(characteristic.getValue()));
+                MainActivity.this.isWritingEntity = true;
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
@@ -390,8 +391,9 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
                 // 字符串转换成 Byte 数组
                 byte[] dataBytes = data.getBytes(StandardCharsets.UTF_8);
-                // 数据分包
+                // 不管是否大于20个字节，都要数据分包
                 subpackageByte(dataBytes);
+
 //                write(dataBytes);
                 break;
 
@@ -406,7 +408,6 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             default:
         }
     }
-
 
 
     /************************************蓝牙操作相关 开始*********************************************/
@@ -555,6 +556,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
     /**
      * 数据分包
+     *
      * @param data 数据源
      */
     private void subpackageByte(byte[] data) {
@@ -566,12 +568,16 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         int dataLength = data.length;
         // 待传数据有效长度，最后一个包是否需要补零
         int availableLength = dataLength;
+        // 待发送数据包的个数
+        int packageCount = ((dataLength % 14 == 0) ? (dataLength / 14) : (dataLength / 14 + 1));
         // 给每个数据分包一个消息 ID，递增
         int msgId = 1000;
+        // 是否消息开始第一个包，内含消息分包的个数
+        boolean isMsgStart = true;
 
         while (index < dataLength) {
 
-            if (!isWritingEntity){
+            if (!isWritingEntity) {
                 L.e("写入取消");
             }
 
@@ -591,52 +597,83 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             // 数据包尾 (byte)0x00;
             txBuffer[19] = BFrameConst.FRAME_END;
 
-            // 数据包 [1]-[4] 为 msgId
-            byte[] msgIdByte = int2byte(msgId);
-            msgId++;
-            /**
-             * 数组拷贝
-             * 原数组
-             * 元数据的起始位置
-             * 目标数组
-             * 目标数组的开始起始位置
-             * 要 copy 的数组的长度
-             */
-            System.arraycopy(msgIdByte, 0, txBuffer, 1, BFrameConst.MESSAGE_ID_LENGTH);
+            byte[] msgIdByte;
+            byte[] packageCountByte;
+            byte[] msgStartIdByte;
+            if (isMsgStart) {
 
-            // 数据包 [5]-[18] 为内容
-            for (int i = 5; i < onePackLength + 5; i++){
-                if(index < dataLength){
-                    txBuffer[i] = data[index++];
-                }
-            }
-            L.i("index = " + index);
-            L.i("onePackLength = " + onePackLength);
-            L.i("dataLength = " + dataLength);
-//            for (int i = 0; i < onePackLength; i++){
-//                if(index < dataLength){
-//                    txBuffer[i] = data[index++];
-//                }
-//            }
+                // 数据包 [1]-[4] 为 msgId，起始位的msgId 为1，代表只发送头部信息，包含消息分包的个数
+                msgIdByte = int2byte(1);
+                packageCountByte = int2byte(packageCount);
+                msgStartIdByte = int2byte(msgId);
 
-            // 更新剩余数据长度
-            availableLength -= onePackLength;
 
-            // 单个数据包发送
-            boolean result = write(txBuffer);
 
-            if(!result) {
-//                if(mBleEntityLisenter != null) {
-//                    mBleEntityLisenter.onWriteFailed();
+
+                /**
+                 * 首包数组拷贝
+                 * 原数组
+                 * 元数据的起始位置
+                 * 目标数组
+                 * 目标数组的开始起始位置
+                 * 要 copy 的数组的长度
+                 */
+                System.arraycopy(msgIdByte, 0, txBuffer, 1, BFrameConst.MESSAGE_ID_LENGTH);
+                System.arraycopy(packageCountByte, 0, txBuffer, 5, BFrameConst.MESSAGE_ID_LENGTH);
+                System.arraycopy(msgStartIdByte, 0, txBuffer, 9, BFrameConst.MESSAGE_ID_LENGTH);
+
+                // 单个数据包发送
+                boolean result = write(txBuffer);
+
+                if (!result) {
                     isWritingEntity = false;
                     isAutoWriteMode = false;
-//                    return false;
-//                }
+                }
+
+                // 将是否为首包置为false，后面的开始发正式数据
+                isMsgStart = false;
+
             } else {
-//                if (mBleEntityLisenter != null) {
-                    double progress = new BigDecimal((float)index / dataLength).setScale(2, BigDecimal.ROUND_HALF_UP).doubleValue();
+
+                // 数据包 [1]-[4] 为 msgId
+                msgIdByte = int2byte(msgId);
+                msgId++;
+
+                /**
+                 * 数组拷贝
+                 * 原数组
+                 * 元数据的起始位置
+                 * 目标数组
+                 * 目标数组的开始起始位置
+                 * 要 copy 的数组的长度
+                 */
+                System.arraycopy(msgIdByte, 0, txBuffer, 1, BFrameConst.MESSAGE_ID_LENGTH);
+
+                // 数据包 [5]-[18] 为内容
+                for (int i = 5; i < onePackLength + 5; i++) {
+                    if (index < dataLength) {
+                        txBuffer[i] = data[index++];
+                    }
+                }
+                L.i("index = " + index);
+                L.i("onePackLength = " + onePackLength);
+                L.i("dataLength = " + dataLength);
+
+                // 更新剩余数据长度
+                availableLength -= onePackLength;
+
+                // 单个数据包发送
+                boolean result = write(txBuffer);
+
+                if (!result) {
+                    isWritingEntity = false;
+                    isAutoWriteMode = false;
+                } else {
+                    double progress = new BigDecimal((float) index / dataLength).setScale(2, BigDecimal.ROUND_HALF_UP).doubleValue();
 //                    mBleEntityLisenter.onWriteProgress(progress);
 //                }
+                }
+
             }
 
 //            if (autoWriteMode) {
@@ -649,12 +686,14 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 //                    }
 //                }
 //            } else {
-                try {
-                    Thread.sleep(100L);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
+            try {
+                Thread.sleep(500L);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
 //            }
+
+
         }
 
         // 这里写入完成
@@ -666,6 +705,22 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 //        return true;
         L.e("写入完成");
 
+    }
+
+    public static int byteArrayToInt(byte[] b) {
+        byte[] a = new byte[4];
+        int i = a.length - 1, j = b.length - 1;
+        for (; i >= 0; i--, j--) {//从b的尾部(即int值的低位)开始copy数据
+            if (j >= 0)
+                a[i] = b[j];
+            else
+                a[i] = 0;//如果b.length不足4,则将高位补0
+        }
+        int v0 = (a[0] & 0xff) << 24;//&0xff将byte值无差异转成int,避免Java自动类型提升后,会保留高位的符号位
+        int v1 = (a[1] & 0xff) << 16;
+        int v2 = (a[2] & 0xff) << 8;
+        int v3 = (a[3] & 0xff);
+        return v0 + v1 + v2 + v3;
     }
 
     public static byte[] prepareOutFrame(int msgid, byte frametype, String msg) {
