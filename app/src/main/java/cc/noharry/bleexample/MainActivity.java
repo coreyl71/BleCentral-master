@@ -579,7 +579,14 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
             if (!isWritingEntity) {
                 L.e("写入取消");
+                try {
+                    Thread.sleep(50L);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                continue;
             }
+            isWritingEntity = false;
 
             // 每包数据内容大小为 14
             int onePackLength = packLength - 6;
@@ -687,7 +694,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 //                }
 //            } else {
             try {
-                Thread.sleep(500L);
+                Thread.sleep(50L);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
