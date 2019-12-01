@@ -269,13 +269,13 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
                 L.i("onCharacteristicChanged value:" + byte2HexStr(characteristic.getValue()));
                 MainActivity.this.isWritingEntity = true;
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        mTvNotifyData.setText(" hexValue:" + byte2HexStr(characteristic.getValue()) + " ,str:"
-                                + new String(characteristic.getValue()));
-                    }
-                });
+//                runOnUiThread(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        mTvNotifyData.setText(" hexValue:" + byte2HexStr(characteristic.getValue()) + " ,str:"
+//                                + new String(characteristic.getValue()));
+//                    }
+//                });
 
             }
 
@@ -578,7 +578,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         while (index < dataLength) {
 
             if (!isWritingEntity) {
-                L.e("写入取消");
+                L.e("等待分包");
                 try {
                     Thread.sleep(50L);
                 } catch (InterruptedException e) {
@@ -586,6 +586,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                 }
                 continue;
             }
+            L.e("开始分包");
             isWritingEntity = false;
 
             // 每包数据内容大小为 14
@@ -645,6 +646,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                 // 数据包 [1]-[4] 为 msgId
                 msgIdByte = int2byte(msgId);
                 msgId++;
+                L.i("msgId = " + msgId);
 
                 /**
                  * 数组拷贝
