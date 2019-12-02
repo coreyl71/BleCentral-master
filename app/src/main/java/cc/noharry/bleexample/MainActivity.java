@@ -561,6 +561,11 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
      */
     private void subpackageByte(byte[] data) {
 
+        // 连接间隔时间修改
+        if (Build.VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
+            mBluetoothGatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH);
+        }
+
         isWritingEntity = true;
         // 数据源数组的指针
         int index = 0;
@@ -710,6 +715,8 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 //            isAutoWriteMode = false;
 //        }
 //        return true;
+        // 连接间隔时间修改
+        mBluetoothGatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_BALANCED);
         L.e("写入完成");
 
     }
