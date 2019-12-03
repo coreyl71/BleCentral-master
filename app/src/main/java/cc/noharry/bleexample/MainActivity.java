@@ -111,7 +111,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
     // 每个包固定长度 20，包括头、尾、msgId
     private int packLength = 20;
     // 给每个数据分包一个消息 ID，递增
-    int msgId = 1000;
+    int msgId;
 
     private BluetoothAdapter mBluetoothAdapter;
 
@@ -278,13 +278,14 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                                               final BluetoothGattCharacteristic characteristic, final int status) {
                 L.i("onCharacteristicWrite status:" + status + " value:"
                         + byte2HexStr(characteristic.getValue()));
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        mTvWriteData.setText("statu:" + status + " hexValue:" + byte2HexStr(characteristic.getValue()) + " ,str:"
-                                + new String(characteristic.getValue()));
-                    }
-                });
+                MainActivity.this.isWritingEntity = true;
+//                runOnUiThread(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        mTvWriteData.setText("statu:" + status + " hexValue:" + byte2HexStr(characteristic.getValue()) + " ,str:"
+//                                + new String(characteristic.getValue()));
+//                    }
+//                });
 
             }
 
@@ -604,7 +605,8 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         // 字符串转换成 Byte 数组
         byte[] dataBytes = data.getBytes(StandardCharsets.UTF_8);
         // 不管是否大于20个字节，都要数据分包
-        subpackageByte(dataBytes);
+        msgId = 1000;
+        subpackageByte(dataBytes, msgId);
 
     }
 
@@ -613,7 +615,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
      *
      * @param data 数据源
      */
-    private void subpackageByte(byte[] data) {
+    private void subpackageByte(byte[] data, int msg_id) {
 
         // 连接间隔时间修改
         if (Build.VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
@@ -645,7 +647,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
                     L.e("等待分包");
                     try {
-                        Thread.sleep(50L);
+                        Thread.sleep(20L);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -688,7 +690,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                 // 数据包 [1]-[4] 为 msgId，起始位的msgId 为1，代表只发送头部信息，包含消息分包的个数
                 msgIdByte = int2byte(1);
                 packageCountByte = int2byte(packageCount);
-                msgStartIdByte = int2byte(msgId);
+                msgStartIdByte = int2byte(msg_id);
 
 
 
@@ -718,10 +720,10 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             } else {
 
                 // 数据包 [1]-[4] 为 msgId
-                msgIdByte = int2byte(msgId);
-                L.i("msgId = " + msgId);
+                msgIdByte = int2byte(msg_id);
+                L.i("msgId = " + msg_id);
                 // TODO: 2019/12/2 应该在收到 Server 回调的时候，做递增
-                msgId++;
+                msg_id++;
 
 
                 /**
@@ -771,7 +773,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 //                }
 //            } else {
             try {
-                Thread.sleep(50L);
+                Thread.sleep(20L);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -869,9 +871,8 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         if (mBluetoothGatt != null && mCharacteristic != null) {
             L.i("开始写 uuid：" + mCharacteristic.getUuid().toString() + " hex:" + byte2HexStr(data) + " str:" + new String(data));
 
-//      mCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
-
-            mCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
+      mCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
+//            mCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
 
             mCharacteristic.setValue(data);
             result = mBluetoothGatt.writeCharacteristic(mCharacteristic);
