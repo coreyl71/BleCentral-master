@@ -53,6 +53,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import cc.noharry.bleexample.utils.ClsUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
@@ -530,6 +531,12 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
      */
     private void connect(BluetoothDevice device) {
         L.i("device.name = " + device.getName());
+        try {
+            //创建createBond
+            ClsUtils.createBond(device.getClass(), device);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         mBluetoothGatt = device.connectGatt(this, false, mBluetoothGattCallback);
 //        if (Build.VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
 //            mBluetoothGatt.requestMtu(512);
