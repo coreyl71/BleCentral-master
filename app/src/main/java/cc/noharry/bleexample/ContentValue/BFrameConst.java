@@ -1,4 +1,4 @@
-package cc.noharry.bleexample;
+package cc.noharry.bleexample.ContentValue;
 
 public class BFrameConst {
     public static byte FRAME_HEAD = (byte)0xFF;

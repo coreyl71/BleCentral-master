@@ -2,7 +2,6 @@ package cc.noharry.bleexample;
 
 import android.Manifest.permission;
 import android.annotation.SuppressLint;
-import android.annotation.TargetApi;
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothAdapter.LeScanCallback;
@@ -28,12 +27,10 @@ import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
-import android.os.SystemClock;
 import android.support.annotation.RequiresApi;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
-import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
@@ -45,15 +42,14 @@ import android.widget.Toast;
 
 import java.io.UnsupportedEncodingException;
 import java.lang.ref.WeakReference;
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import cc.noharry.bleexample.utils.ClsUtils;
+import cc.noharry.bleexample.ContentValue.BFrameConst;
+import cc.noharry.bleexample.utils.L;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
@@ -101,6 +97,12 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
      * 调起蓝牙询问的请求码
      */
     private static final int REQUEST_ENABLE_BT = 100;
+
+    /**
+     * 蓝牙设备的名称
+     */
+//    private static final String BLE_DEVICE_NAME = "LIF_BLE";
+    private static final String BLE_DEVICE_NAME = "Corey_MI5S_S";
 
     /**
      * 数据分包相关参数
@@ -189,8 +191,8 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                     });
                 }
 
-                if ("Corey_MI5S_S".equals(result.getDevice().getName())) {
-                    L.i("发现 Corey_MI5S_S");
+                if (BLE_DEVICE_NAME.equals(result.getDevice().getName())) {
+                    L.i("发现 " + BLE_DEVICE_NAME);
                     mBluetoothDevice = result.getDevice();
                     stopNewScan();
                 }
@@ -206,8 +208,8 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                         mTvScanState.setText("扫描中");
                     }
                 });
-                if ("Corey_MI5S_S".equals(device.getName())) {
-                    L.i("发现 Corey_MI5S_S");
+                if (BLE_DEVICE_NAME.equals(device.getName())) {
+                    L.i("发现 " + BLE_DEVICE_NAME);
                     mBluetoothDevice = device;
                     stopScan();
                 }
@@ -531,12 +533,12 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
      */
     private void connect(BluetoothDevice device) {
         L.i("device.name = " + device.getName());
-        try {
-            //创建createBond
-            ClsUtils.createBond(device.getClass(), device);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+//        try {
+//            //创建createBond
+//            ClsUtils.createBond(device.getClass(), device);
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        }
         mBluetoothGatt = device.connectGatt(this, false, mBluetoothGattCallback);
 //        if (Build.VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
 //            mBluetoothGatt.requestMtu(512);

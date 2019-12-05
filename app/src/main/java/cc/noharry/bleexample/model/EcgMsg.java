@@ -1,4 +1,4 @@
-package cc.noharry.bleexample;
+package cc.noharry.bleexample.model;
 
 import java.util.Arrays;
 
