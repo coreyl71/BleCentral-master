@@ -519,7 +519,8 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         if (mBluetoothAdapter == null) {
             L.i("mBluetoothAdapter == null");
         } else {
-            mBluetoothAdapter.startLeScan(/*uuids,*/mLeScanCallback);
+//            mBluetoothAdapter.startLeScan(uuids, mLeScanCallback);
+            mBluetoothAdapter.startLeScan(mLeScanCallback);
         }
 
     }
