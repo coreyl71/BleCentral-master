@@ -45,6 +45,7 @@ import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -119,6 +120,28 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
     private BluetoothAdapter mBluetoothAdapter;
 
+    //蓝牙广播接收器。修改名字时会调用。
+    private BroadcastReceiver mReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            L.i("当前蓝牙名字 = " + mBluetoothAdapter.getName());
+            String action = intent.getAction();
+            if (BluetoothAdapter.ACTION_LOCAL_NAME_CHANGED.equals(action)) {
+                L.i("蓝牙名字修改成功 = " + mBluetoothAdapter.getName());
+                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+
+                Set<BluetoothDevice> devices = mBluetoothAdapter.getBondedDevices();
+                for (int i = 0; i < devices.size(); i++) {
+                    BluetoothDevice device1 = (BluetoothDevice) devices.iterator().next();
+                    Log.i("tang", "2-2蓝牙名字=" + device1.getName());
+                    //System.out.println(device1.getName());
+                }
+            } else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)) {
+                L.i("搜索完成");
+            }
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -137,6 +160,10 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             mBluetoothAdapter = bluetoothManager.getAdapter();
             mBluetoothAdapter.setName("Corey_MIX3_C");
             Log.i("Ble_Client---", "local_name = " + mBluetoothAdapter.getName());
+            // TODO: 2019/12/9 发个广播---名字变化
+            IntentFilter mFilter = new IntentFilter(BluetoothAdapter.ACTION_LOCAL_NAME_CHANGED);
+            mFilter.addAction(BluetoothAdapter.EXTRA_LOCAL_NAME);
+            registerReceiver(mReceiver, mFilter);
         }
 
         // 检测蓝牙在本机是否可用
@@ -574,7 +601,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                         L.i("配对信息===>>>>connectResult = " + connectResult);
                         abortBroadcast();//如果没有将广播终止，则会出现一个一闪而过的配对框。
                     } catch (Exception e) {
-                        L.e("反射异常："+e);
+                        L.e("反射异常：" + e);
                         // TODO Auto-generated catch block
                         L.i("请求连接错误");
                     }
@@ -738,8 +765,6 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                 msgIdByte = int2byte(1);
                 packageCountByte = int2byte(packageCount);
                 msgStartIdByte = int2byte(msg_id);
-
-
 
 
                 /**
@@ -918,7 +943,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         if (mBluetoothGatt != null && mCharacteristic != null) {
             L.i("开始写 uuid：" + mCharacteristic.getUuid().toString() + " hex:" + byte2HexStr(data) + " str:" + new String(data));
 
-      mCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
+            mCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
 //            mCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
 
             mCharacteristic.setValue(data);
