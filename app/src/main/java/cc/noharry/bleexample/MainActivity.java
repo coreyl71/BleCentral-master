@@ -49,6 +49,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import cc.noharry.bleexample.ContentValue.BFrameConst;
+import cc.noharry.bleexample.utils.ClsUtils;
 import cc.noharry.bleexample.utils.L;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -102,7 +103,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
      * 蓝牙设备的名称
      */
 //    private static final String BLE_DEVICE_NAME = "LIF_BLE";
-    private static final String BLE_DEVICE_NAME = "Corey_MI5S_S";
+    private static final String BLE_DEVICE_NAME = "Corey_MI5S_S1";
 
     /**
      * 数据分包相关参数
@@ -543,6 +544,43 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 //        if (Build.VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
 //            mBluetoothGatt.requestMtu(512);
 //        }
+    }
+
+    public static class BluetoothConnectReceiver extends BroadcastReceiver {
+
+        String strPsw = "111111";
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            // TODO Auto-generated method stub
+            if (intent.getAction().equals("android.bluetooth.device.action.PAIRING_REQUEST")) {
+                L.i("配对监听");
+                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                if (device.getBondState() != BluetoothDevice.BOND_BONDED) {
+                    L.i("未配对");
+                    try {
+                        /**
+                         * cancelPairingUserInput（）取消用户输入密钥框，
+                         * 个人觉得一般情况下不要和setPin（setPasskey、setPairingConfirmation、
+                         * setRemoteOutOfBandData）一起用，
+                         * 这几个方法都会remove掉map里面的key:value（<<<<<也就是互斥的>>>>>>）。
+                         */
+                        //1.确认配对
+                        //ClsUtils.setPairingConfirmation(device.getClass(), device, true);
+                        boolean connectResult = ClsUtils.setPin(device.getClass(), device, strPsw); // 手机和蓝牙采集器配对
+//                        boolean connectResult = ClsUtils.pair(device.getAddress(), "1111");
+                        //ClsUtils.setPasskey(device.getClass(), device, strPsw);
+                        //ClsUtils.cancelPairingUserInput(device.getClass(), device); //一般调用不成功，前言里面讲解过了
+                        L.i("配对信息===>>>>connectResult = " + connectResult);
+                        abortBroadcast();//如果没有将广播终止，则会出现一个一闪而过的配对框。
+                    } catch (Exception e) {
+                        L.e("反射异常："+e);
+                        // TODO Auto-generated catch block
+                        L.i("请求连接错误");
+                    }
+                }
+            }
+        }
     }
 
 //  private final static String TAG = MainActivity.class.getSimpleName();
