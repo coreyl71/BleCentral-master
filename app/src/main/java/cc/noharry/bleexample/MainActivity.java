@@ -120,28 +120,6 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
     private BluetoothAdapter mBluetoothAdapter;
 
-    //蓝牙广播接收器。修改名字时会调用。
-    private BroadcastReceiver mReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            L.i("当前蓝牙名字 = " + mBluetoothAdapter.getName());
-            String action = intent.getAction();
-            if (BluetoothAdapter.ACTION_LOCAL_NAME_CHANGED.equals(action)) {
-                L.i("蓝牙名字修改成功 = " + mBluetoothAdapter.getName());
-                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-
-                Set<BluetoothDevice> devices = mBluetoothAdapter.getBondedDevices();
-                for (int i = 0; i < devices.size(); i++) {
-                    BluetoothDevice device1 = (BluetoothDevice) devices.iterator().next();
-                    Log.i("tang", "2-2蓝牙名字=" + device1.getName());
-                    //System.out.println(device1.getName());
-                }
-            } else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)) {
-                L.i("搜索完成");
-            }
-        }
-    };
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -158,18 +136,13 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                 (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
         if (null != bluetoothManager) {
             mBluetoothAdapter = bluetoothManager.getAdapter();
-            mBluetoothAdapter.setName("Corey_MIX3_C");
+//            mBluetoothAdapter.setName("Corey_MIX3_C");
             Log.i("Ble_Client---", "local_name = " + mBluetoothAdapter.getName());
-            // TODO: 2019/12/9 发个广播---名字变化
-            IntentFilter mFilter = new IntentFilter(BluetoothAdapter.ACTION_LOCAL_NAME_CHANGED);
-            mFilter.addAction(BluetoothAdapter.EXTRA_LOCAL_NAME);
-            registerReceiver(mReceiver, mFilter);
         }
 
         // 检测蓝牙在本机是否可用
         if (null == mBluetoothAdapter) {
             Toast.makeText(this, R.string.error_bluetooth_not_supported, Toast.LENGTH_SHORT).show();
-//            finish();
             return;
         }
 
@@ -191,14 +164,13 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
     protected void onResume() {
         super.onResume();
 
-        // Ensures Bluetooth is enabled on the device.  If Bluetooth is not currently enabled,
-        // fire an intent to display a dialog asking the user to grant permission to enable it.
+        // 确保蓝牙可用，若暂未可用，弹框提示用户开启蓝牙
         if (!mBluetoothAdapter.isEnabled()) {
             Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
             startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
         }
 
-        // Initializes list view adapter.
+        // 设置 BLE 设备展示列表的适配器
 //    mLeDeviceListAdapter = new LeDeviceListAdapter();
 //    setListAdapter(mLeDeviceListAdapter);
 //    scanLeDevice(true);
@@ -267,7 +239,9 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                         }
                     });
 
+                    // 发现目标特征
                     gatt.discoverServices();
+                    // 增加 MTU 容量，不建议使用，依然采用分包的方式
 //                    if (Build.VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
 //                        gatt.requestMtu(5120);
 //                    }
@@ -285,6 +259,15 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                     mCharacteristic = service.getCharacteristic(UUID_CHARWRITE);
                     if (mCharacteristic != null) {
                         L.i("获取到目标特征");
+
+                        // TODO: 2019/12/10 马上将本机唯一标识码作为 token，传给 Server 保存
+                        String contentStr = BFrameConst.TOKEN;
+                        // 给 Handler 传参数，准备预分包，即字符串转 byte[]
+                        Message msgSendContent = mHandler.obtainMessage();
+                        msgSendContent.what = BFrameConst.START_MSG_ID_UNIQUE;
+                        msgSendContent.obj = contentStr;
+                        mHandler.sendMessage(msgSendContent);
+
                     }
                 }
             }
@@ -335,6 +318,8 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                 L.i("onCharacteristicChanged value:" + byte2HexStr(characteristic.getValue()));
                 // TODO: 2019/12/2 这里需要加入判断，是否是当前 msgId 传过去的回调
                 MainActivity.this.isWritingEntity = true;
+
+
 //                runOnUiThread(new Runnable() {
 //                    @Override
 //                    public void run() {
@@ -449,30 +434,25 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
             case R.id.btn_write:
 
-//                String data = mEtWrite.getText().toString().trim();
-//                if (TextUtils.isEmpty(data)) {
-//                    Toast.makeText(MainActivity.this, "请输入发送内容", Toast.LENGTH_SHORT).show();
-//                    break;
-//                }
-//
-//                // 字符串转换成 Byte 数组
-//                byte[] dataBytes = data.getBytes(StandardCharsets.UTF_8);
-//                // 不管是否大于20个字节，都要数据分包
-//                subpackageByte(dataBytes);
+                // 获取输入框内容字符串
+                String contentStr = mEtWrite.getText().toString().trim();
+                if (TextUtils.isEmpty(contentStr)) {
+                    Toast.makeText(MainActivity.this, "请输入发送内容", Toast.LENGTH_SHORT).show();
+                    return;
+                }
 
-                // 预分包，获取发送数据字符串，转 byte 数组
-//                preSubpackageByte();
-
-                // TODO: 2019/12/2 这里耗时操作用 Handler 来控制
-//                mHandler.sendEmptyMessage(START_SUBPACKAGE);
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        preSubpackageByte();
-                    }
-                });
-
-
+                // 给 Handler 传参数，准备预分包，即字符串转 byte[]
+                Message msgSendContent = mHandler.obtainMessage();
+                // 数据包类型
+                msgSendContent.what = BFrameConst.START_MSG_ID_CONTENT;
+                msgSendContent.obj = contentStr;
+                mHandler.sendMessage(msgSendContent);
+//                mHandler.post(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        preSubpackageByte(data);
+//                    }
+//                });
                 break;
 
             case R.id.btn_notify:
@@ -561,7 +541,8 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
      * @param device 需要连接的蓝牙设备，即外围设备、从设备、作为 Server 端的设备
      */
     private void connect(BluetoothDevice device) {
-        L.i("device.name = " + device.getName());
+        L.i("device.name---server = " + device.getName());
+        L.i("device.name---local = " + mBluetoothAdapter.getName());
 //        try {
 //            //创建createBond
 //            ClsUtils.createBond(device.getClass(), device);
@@ -668,20 +649,16 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
     /**
      * 获取将要发送的文本，并转换为 byte 数组
      * 即将分包
+     * @param data
+     * @param msgType 传输数据类型，token/实际数据/
      */
-    private void preSubpackageByte() {
+    private void preSubpackageByte(String data, int msgType) {
 
-        String data = mEtWrite.getText().toString().trim();
-        if (TextUtils.isEmpty(data)) {
-            Toast.makeText(MainActivity.this, "请输入发送内容", Toast.LENGTH_SHORT).show();
-            return;
-        }
 
         // 字符串转换成 Byte 数组
         byte[] dataBytes = data.getBytes(StandardCharsets.UTF_8);
-        // 不管是否大于20个字节，都要数据分包
-        msgId = 1000;
-        subpackageByte(dataBytes, msgId);
+        // 分包操作
+        subpackageByte(dataBytes, msgType);
 
     }
 
@@ -762,8 +739,8 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             byte[] msgStartIdByte;
             if (isMsgStart) {
 
-                // 数据包 [1]-[4] 为 msgId，起始位的msgId 为1，代表只发送头部信息，包含消息分包的个数
-                msgIdByte = int2byte(1);
+                // 数据包 [1]-[4] 为 msgId，起始位的 msgId 为 1，代表只发送头部信息，包含消息分包的个数
+                msgIdByte = int2byte(BFrameConst.START_MSG_ID_START);
                 packageCountByte = int2byte(packageCount);
                 msgStartIdByte = int2byte(msg_id);
 
@@ -1148,10 +1125,22 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
             switch (msg.what) {
 
-                case START_SUBPACKAGE:
+                case BFrameConst.START_MSG_ID_UNIQUE:
 
-                    // 开始预分包
-                    act.preSubpackageByte();
+                    /**
+                     * 发送 TOKEN
+                     * 第一个参数为发送内容，第二个参数为数据包类型：TOKEN/发送内容
+                     */
+                    act.preSubpackageByte((String) msg.obj, BFrameConst.START_MSG_ID_UNIQUE);
+                    break;
+
+                case BFrameConst.START_MSG_ID_CONTENT:
+
+                    /**
+                     * 发送实际内容
+                     * 第一个参数为发送内容，第二个参数为数据包类型：TOKEN/发送内容
+                     */
+                    act.preSubpackageByte((String) msg.obj, BFrameConst.START_MSG_ID_CONTENT);
                     break;
 
 //                case SHOW_LOADING: // 需要显示 Loading
