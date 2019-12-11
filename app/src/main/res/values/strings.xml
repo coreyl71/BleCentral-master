@@ -1,5 +1,5 @@
 <resources>
-  <string name="app_name">BleExample</string>
+  <string name="app_name">BleCentral</string>
 
   <string name="ble_not_supported">BLE is not supported</string>
   <string name="label_data">Data:</string>

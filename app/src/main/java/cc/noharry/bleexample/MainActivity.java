@@ -654,11 +654,24 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
      */
     private void preSubpackageByte(String data, int msgType) {
 
-
         // 字符串转换成 Byte 数组
+        int dataLength = data.getBytes(StandardCharsets.UTF_8).length;
         byte[] dataBytes = data.getBytes(StandardCharsets.UTF_8);
+
+        // 定义新的数据包存放数据（加包头包尾）
+        byte[] dataFinalBytes = new byte[dataLength + 2 + 4];
+        // 包头包尾加两个标识位
+        dataFinalBytes[0] = (byte) 0xFF;
+        dataFinalBytes[dataFinalBytes.length - 1] = (byte) 0x00;
+        // 先放数据包类型
+        byte[] msgStartIdByte = int2byte(msgType);
+        System.arraycopy(msgStartIdByte, 0, dataFinalBytes, 1, BFrameConst.MESSAGE_ID_LENGTH);
+        // 中间放传输内容
+        System.arraycopy(dataBytes, 0, dataFinalBytes, 5, dataLength);
+
         // 分包操作
-        subpackageByte(dataBytes, msgType);
+//        subpackageByte(dataBytes, msgType);
+        subpackageByte(dataFinalBytes, msgType);
 
     }
 
@@ -667,7 +680,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
      *
      * @param data 数据源
      */
-    private void subpackageByte(byte[] data, int msg_id) {
+    private void subpackageByte(byte[] data, int msgType) {
 
         // 连接间隔时间修改
         if (Build.VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
@@ -682,7 +695,9 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         // 待传数据有效长度，最后一个包是否需要补零
         int availableLength = dataLength;
         // 待发送数据包的个数
-        int packageCount = ((dataLength % 14 == 0) ? (dataLength / 14) : (dataLength / 14 + 1));
+//        int packageCount = ((dataLength % 14 == 0) ? (dataLength / 14) : (dataLength / 14 + 1));
+//        int packageCount = ((dataLength % 18 == 0) ? (dataLength / 18) : (dataLength / 18 + 1));
+        int packageCount = ((dataLength % 20 == 0) ? (dataLength / 20) : (dataLength / 20 + 1));
 
         // 重试次数
         int retryCount = 0;
@@ -719,10 +734,14 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             isWritingEntity = false;
 
             // 每包数据内容大小为 14
-            int onePackLength = packLength - 6;
+//            int onePackLength = packLength - 6;
+//            int onePackLength = packLength - 4;
+            int onePackLength = packLength;
             // 最后一包不足长度不会自动补零
             if (!lastPackComplete) {
-                onePackLength = (availableLength >= (packLength - 6) ? (packLength - 6) : availableLength);
+//                onePackLength = (availableLength >= (packLength - 6) ? (packLength - 6) : availableLength);
+//                onePackLength = (availableLength >= (packLength - 4) ? (packLength - 4) : availableLength);
+                onePackLength = (availableLength >= packLength) ? packLength : availableLength;
             }
 
             // 实例化一个数据分包，长度为 20
@@ -730,19 +749,19 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             byte[] txBuffer = new byte[packLength];
 
             // 数据包头 (byte)0xFF
-            txBuffer[0] = BFrameConst.FRAME_HEAD;
+//            txBuffer[0] = BFrameConst.FRAME_HEAD;
             // 数据包尾 (byte)0x00;
-            txBuffer[19] = BFrameConst.FRAME_END;
+//            txBuffer[19] = BFrameConst.FRAME_END;
 
             byte[] msgIdByte;
             byte[] packageCountByte;
-            byte[] msgStartIdByte;
+//            byte[] msgStartIdByte;
             if (isMsgStart) {
 
                 // 数据包 [1]-[4] 为 msgId，起始位的 msgId 为 1，代表只发送头部信息，包含消息分包的个数
                 msgIdByte = int2byte(BFrameConst.START_MSG_ID_START);
                 packageCountByte = int2byte(packageCount);
-                msgStartIdByte = int2byte(msg_id);
+//                msgStartIdByte = int2byte(msgType);
 
 
                 /**
@@ -753,9 +772,12 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                  * 目标数组的开始起始位置
                  * 要 copy 的数组的长度
                  */
-                System.arraycopy(msgIdByte, 0, txBuffer, 1, BFrameConst.MESSAGE_ID_LENGTH);
-                System.arraycopy(packageCountByte, 0, txBuffer, 5, BFrameConst.MESSAGE_ID_LENGTH);
-                System.arraycopy(msgStartIdByte, 0, txBuffer, 9, BFrameConst.MESSAGE_ID_LENGTH);
+//                System.arraycopy(msgIdByte, 0, txBuffer, 1, BFrameConst.MESSAGE_ID_LENGTH);
+//                System.arraycopy(packageCountByte, 0, txBuffer, 5, BFrameConst.MESSAGE_ID_LENGTH);
+//                System.arraycopy(msgStartIdByte, 0, txBuffer, 9, BFrameConst.MESSAGE_ID_LENGTH);
+                System.arraycopy(msgIdByte, 0, txBuffer, 0, BFrameConst.MESSAGE_ID_LENGTH);
+                System.arraycopy(packageCountByte, 0, txBuffer, 4, BFrameConst.MESSAGE_ID_LENGTH);
+//                System.arraycopy(msgStartIdByte, 0, txBuffer, 8, BFrameConst.MESSAGE_ID_LENGTH);
 
                 // 单个数据包发送
                 boolean result = write(txBuffer);
@@ -770,10 +792,10 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             } else {
 
                 // 数据包 [1]-[4] 为 msgId
-                msgIdByte = int2byte(msg_id);
-                L.i("msgId = " + msg_id);
-                // TODO: 2019/12/2 应该在收到 Server 回调的时候，做递增
-                msg_id++;
+//                msgIdByte = int2byte(msg_id);
+//                L.i("msgId = " + msg_id);
+//                // TODO: 2019/12/2 应该在收到 Server 回调的时候，做递增
+//                msg_id++;
 
 
                 /**
@@ -784,10 +806,17 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                  * 目标数组的开始起始位置
                  * 要 copy 的数组的长度
                  */
-                System.arraycopy(msgIdByte, 0, txBuffer, 1, BFrameConst.MESSAGE_ID_LENGTH);
+//                System.arraycopy(msgIdByte, 0, txBuffer, 1, BFrameConst.MESSAGE_ID_LENGTH);
+                // 2019/12/11 只有首包才传msgId，内容包不传 msg_id 了
+//                System.arraycopy(msgIdByte, 0, txBuffer, 0, BFrameConst.MESSAGE_ID_LENGTH);
 
                 // 数据包 [5]-[18] 为内容
-                for (int i = 5; i < onePackLength + 5; i++) {
+//                for (int i = 4; i < onePackLength + 4; i++) {
+//                    if (index < dataLength) {
+//                        txBuffer[i] = data[index++];
+//                    }
+//                }
+                for (int i = 0; i < onePackLength; i++) {
                     if (index < dataLength) {
                         txBuffer[i] = data[index++];
                     }
@@ -812,33 +841,15 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
             }
 
-//            if (autoWriteMode) {
-//                synchronized (lock) {
-//                    try {
-////                        lock.wait(500);
-//                        lock.wait();
-//                    } catch (InterruptedException e) {
-//                        e.printStackTrace();
-//                    }
-//                }
-//            } else {
             try {
                 Thread.sleep(20L);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-//            }
 
 
         }
 
-        // 这里写入完成
-//        if(mBleEntityLisenter != null){
-//            mBleEntityLisenter.onWriteSuccess();
-//            isWritingEntity = false;
-//            isAutoWriteMode = false;
-//        }
-//        return true;
         // 连接间隔时间修改
         if (Build.VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
             mBluetoothGatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_BALANCED);

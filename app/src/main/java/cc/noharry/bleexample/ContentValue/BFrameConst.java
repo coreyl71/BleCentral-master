@@ -23,6 +23,6 @@ public class BFrameConst {
     /**
      * 之后将这里改为本机唯一标识码
      */
-    public static final String TOKEN = "token";
+    public static final String TOKEN = "token1";
 
 }
