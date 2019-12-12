@@ -7,12 +7,12 @@ public class BFrameConst {
     public static byte FRAME_END = (byte)0x00;
 
     /**
-     * 发送主设备唯一标识码的数据包起始 msgId
+     * 发送主设备唯一标识码的数据包消息类型 msgType
      */
-    public static final int START_MSG_ID_UNIQUE = 1000;
+    public static final int START_MSG_ID_TOKEN = 1000;
     public static final int START_MSG_ID_CONTENT = 2000;
     /**
-     * 开始发送消息的数据包起始 msgId
+     * 开始发送消息的数据包起始 msgType
      */
     public static final int START_MSG_ID_START = 1;
     /**
@@ -24,5 +24,6 @@ public class BFrameConst {
      * 之后将这里改为本机唯一标识码
      */
     public static final String TOKEN = "token1";
+//    public static final String TOKEN = "一二三四五六七八九十壹贰叁肆伍陆柒捌玖拾000000000000000000001234567890";
 
 }

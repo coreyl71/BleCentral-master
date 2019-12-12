@@ -50,6 +50,8 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import cc.noharry.bleexample.ContentValue.BFrameConst;
+import cc.noharry.bleexample.utils.AssetsUtil;
+import cc.noharry.bleexample.utils.ByteUtil;
 import cc.noharry.bleexample.utils.ClsUtils;
 import cc.noharry.bleexample.utils.L;
 import io.netty.buffer.ByteBuf;
@@ -255,6 +257,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             public void onServicesDiscovered(BluetoothGatt gatt, int status) {
                 L.i("onServicesDiscovered status:" + status);
                 BluetoothGattService service = gatt.getService(UUID_SERVER);
+                L.i("onServicesDiscovered BluetoothGattService:" + service);
                 if (service != null) {
                     mCharacteristic = service.getCharacteristic(UUID_CHARWRITE);
                     if (mCharacteristic != null) {
@@ -264,7 +267,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                         String contentStr = BFrameConst.TOKEN;
                         // 给 Handler 传参数，准备预分包，即字符串转 byte[]
                         Message msgSendContent = mHandler.obtainMessage();
-                        msgSendContent.what = BFrameConst.START_MSG_ID_UNIQUE;
+                        msgSendContent.what = BFrameConst.START_MSG_ID_TOKEN;
                         msgSendContent.obj = contentStr;
                         mHandler.sendMessage(msgSendContent);
 
@@ -276,11 +279,11 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             public void onCharacteristicRead(BluetoothGatt gatt,
                                              final BluetoothGattCharacteristic characteristic, final int status) {
                 L.i("onCharacteristicRead status:" + status + " value:"
-                        + byte2HexStr(characteristic.getValue()));
+                        + ByteUtil.byte2HexStr(characteristic.getValue()));
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        mTvReadData.setText("statu:" + status + " hexValue:" + byte2HexStr(characteristic.getValue()) + " ,str:"
+                        mTvReadData.setText("statu:" + status + " hexValue:" + ByteUtil.byte2HexStr(characteristic.getValue()) + " ,str:"
                                 + new String(characteristic.getValue()));
                     }
                 });
@@ -291,15 +294,8 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             public void onCharacteristicWrite(BluetoothGatt gatt,
                                               final BluetoothGattCharacteristic characteristic, final int status) {
                 L.i("onCharacteristicWrite status:" + status + " value:"
-                        + byte2HexStr(characteristic.getValue()));
+                        + ByteUtil.byte2HexStr(characteristic.getValue()));
                 MainActivity.this.isWritingEntity = true;
-//                runOnUiThread(new Runnable() {
-//                    @Override
-//                    public void run() {
-//                        mTvWriteData.setText("statu:" + status + " hexValue:" + byte2HexStr(characteristic.getValue()) + " ,str:"
-//                                + new String(characteristic.getValue()));
-//                    }
-//                });
 
             }
 
@@ -308,38 +304,22 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                                                 final BluetoothGattCharacteristic characteristic) {
 
                 //开启notify之后，我们就可以在这里接收数据了。
-                //分包处理数据
-//                btBuffer.appendBuffer(characteristic.getValue());
-//                while (true){
-//                    boolean ret = subPackageOnce(btBuffer);
-//                    if (false == ret) break;
-//                }
-
-                L.i("onCharacteristicChanged value:" + byte2HexStr(characteristic.getValue()));
-                // TODO: 2019/12/2 这里需要加入判断，是否是当前 msgId 传过去的回调
+                L.i("onCharacteristicChanged value:" + ByteUtil.byte2HexStr(characteristic.getValue()));
+                // TODO: 2019/12/2 收到回调，可以传下一个数据包
                 MainActivity.this.isWritingEntity = true;
-
-
-//                runOnUiThread(new Runnable() {
-//                    @Override
-//                    public void run() {
-//                        mTvNotifyData.setText(" hexValue:" + byte2HexStr(characteristic.getValue()) + " ,str:"
-//                                + new String(characteristic.getValue()));
-//                    }
-//                });
 
             }
 
             @Override
             public void onDescriptorRead(BluetoothGatt gatt, BluetoothGattDescriptor descriptor,
                                          int status) {
-                L.i("onDescriptorRead status:" + status + " value:" + byte2HexStr(descriptor.getValue()));
+                L.i("onDescriptorRead status:" + status + " value:" + ByteUtil.byte2HexStr(descriptor.getValue()));
             }
 
             @Override
             public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor,
                                           int status) {
-                L.i("onDescriptorWrite status:" + status + " value:" + byte2HexStr(descriptor.getValue()));
+                L.i("onDescriptorWrite status:" + status + " value:" + ByteUtil.byte2HexStr(descriptor.getValue()));
             }
         };
     }
@@ -374,33 +354,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 //        return false;
 //    }
 
-    private void initEvent() {
-        mBtnScan.setOnClickListener(this);
-        mBtnStopScan.setOnClickListener(this);
-        mBtnConnect.setOnClickListener(this);
-        mBtnDisconnect.setOnClickListener(this);
-        mBtnRead.setOnClickListener(this);
-        mBtnWrite.setOnClickListener(this);
-        mBtnNotify.setOnClickListener(this);
-        mBtnDisableNotify.setOnClickListener(this);
-    }
 
-    private void initView() {
-        mBtnScan = findViewById(R.id.btn_scan);
-        mBtnStopScan = findViewById(R.id.btn_stop_scan);
-        mBtnConnect = findViewById(R.id.btn_connect);
-        mBtnDisconnect = findViewById(R.id.btn_disconnect);
-        mBtnRead = findViewById(R.id.btn_read);
-        mBtnWrite = findViewById(R.id.btn_write);
-        mBtnNotify = findViewById(R.id.btn_notify);
-        mBtnDisableNotify = findViewById(R.id.btn_disable_notify);
-        mTvScanState = findViewById(R.id.tv_scan_state);
-        mTvConnState = findViewById(R.id.tv_connect_state);
-        mTvReadData = findViewById(R.id.tv_read_data);
-        mTvWriteData = findViewById(R.id.tv_write_data);
-        mTvNotifyData = findViewById(R.id.tv_notify_data);
-        mEtWrite = findViewById(R.id.et_write);
-    }
 
     private ByteBuf buffer = Unpooled.buffer(1024 * 1000);
 
@@ -435,11 +389,16 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             case R.id.btn_write:
 
                 // 获取输入框内容字符串
-                String contentStr = mEtWrite.getText().toString().trim();
-                if (TextUtils.isEmpty(contentStr)) {
-                    Toast.makeText(MainActivity.this, "请输入发送内容", Toast.LENGTH_SHORT).show();
-                    return;
-                }
+//                String contentStr = mEtWrite.getText().toString().trim();
+//                if (TextUtils.isEmpty(contentStr)) {
+//                    Toast.makeText(MainActivity.this, "请输入发送内容", Toast.LENGTH_SHORT).show();
+//                    return;
+//                }
+
+                // 从 assets 文件中获取发送内容
+                String contentStr = AssetsUtil.getJson("BLE100组健康数据示例.txt", getApplicationContext());
+
+                L.e("contentStr = " + contentStr);
 
                 // 给 Handler 传参数，准备预分包，即字符串转 byte[]
                 Message msgSendContent = mHandler.obtainMessage();
@@ -447,12 +406,6 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                 msgSendContent.what = BFrameConst.START_MSG_ID_CONTENT;
                 msgSendContent.obj = contentStr;
                 mHandler.sendMessage(msgSendContent);
-//                mHandler.post(new Runnable() {
-//                    @Override
-//                    public void run() {
-//                        preSubpackageByte(data);
-//                    }
-//                });
                 break;
 
             case R.id.btn_notify:
@@ -592,39 +545,6 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         }
     }
 
-//  private final static String TAG = MainActivity.class.getSimpleName();
-//  public boolean connect(final String address) {
-//    if (mBluetoothAdapter == null || address == null) {
-//      Log.w(TAG, "BluetoothAdapter not initialized or unspecified address.");
-//      return false;
-//    }
-//
-//    // Previously connected device.  Try to reconnect.
-//    if (mBluetoothDeviceAddress != null && address.equals(mBluetoothDeviceAddress)
-//            && mBluetoothGatt != null) {
-//      Log.d(TAG, "Trying to use an existing mBluetoothGatt for connection.");
-//      if (mBluetoothGatt.connect()) {
-//        mConnectionState = STATE_CONNECTING;
-//        return true;
-//      } else {
-//        return false;
-//      }
-//    }
-//
-//    final BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(address);
-//    if (device == null) {
-//      Log.w(TAG, "Device not found.  Unable to connect.");
-//      return false;
-//    }
-//    // We want to directly connect to the device, so we are setting the autoConnect
-//    // parameter to false.
-//    mBluetoothGatt = device.connectGatt(this, false, mGattCallback);
-//    Log.d(TAG, "Trying to create a new connection.");
-//    mBluetoothDeviceAddress = address;
-//    mConnectionState = STATE_CONNECTING;
-//    return true;
-//  }
-
     /**
      * 断开连接
      */
@@ -658,20 +578,24 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         int dataLength = data.getBytes(StandardCharsets.UTF_8).length;
         byte[] dataBytes = data.getBytes(StandardCharsets.UTF_8);
 
-        // 定义新的数据包存放数据（加包头包尾）
-        byte[] dataFinalBytes = new byte[dataLength + 2 + 4];
+        // 定义新的数据包存放数据（加包头包尾），再加类型，再加包的个数
+        byte[] dataFinalBytes = new byte[dataLength + 2 + 4 + 4];
         // 包头包尾加两个标识位
         dataFinalBytes[0] = (byte) 0xFF;
         dataFinalBytes[dataFinalBytes.length - 1] = (byte) 0x00;
         // 先放数据包类型
-        byte[] msgStartIdByte = int2byte(msgType);
+        byte[] msgStartIdByte = ByteUtil.int2byte(msgType);
         System.arraycopy(msgStartIdByte, 0, dataFinalBytes, 1, BFrameConst.MESSAGE_ID_LENGTH);
+        // 再放总包长度
+        int msgPackageCount = ((dataLength % 20 == 0) ? (dataLength / 20) : (dataLength / 20 + 1));
+        byte[] msgPackageCountByte = ByteUtil.int2byte(msgPackageCount);
+        System.arraycopy(msgPackageCountByte, 0, dataFinalBytes, 5, BFrameConst.MESSAGE_ID_LENGTH);
         // 中间放传输内容
-        System.arraycopy(dataBytes, 0, dataFinalBytes, 5, dataLength);
+        System.arraycopy(dataBytes, 0, dataFinalBytes, 9, dataLength);
 
-        // 分包操作
+        // 分包操作，这里将msgType直接放在了原数组中，所以不需要单独传
 //        subpackageByte(dataBytes, msgType);
-        subpackageByte(dataFinalBytes, msgType);
+        subpackageByte(dataFinalBytes);
 
     }
 
@@ -680,7 +604,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
      *
      * @param data 数据源
      */
-    private void subpackageByte(byte[] data, int msgType) {
+    private void subpackageByte(byte[] data) {
 
         // 连接间隔时间修改
         if (Build.VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
@@ -689,15 +613,12 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
         isWritingEntity = true;
         // 数据源数组的指针
-        int index = 0;
+//        int index = 0;
+        int index = 9;
         // 数据总长度
         int dataLength = data.length;
         // 待传数据有效长度，最后一个包是否需要补零
         int availableLength = dataLength;
-        // 待发送数据包的个数
-//        int packageCount = ((dataLength % 14 == 0) ? (dataLength / 14) : (dataLength / 14 + 1));
-//        int packageCount = ((dataLength % 18 == 0) ? (dataLength / 18) : (dataLength / 18 + 1));
-        int packageCount = ((dataLength % 20 == 0) ? (dataLength / 20) : (dataLength / 20 + 1));
 
         // 重试次数
         int retryCount = 0;
@@ -733,14 +654,10 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             // 开始分包，状态置为未就绪状态
             isWritingEntity = false;
 
-            // 每包数据内容大小为 14
-//            int onePackLength = packLength - 6;
-//            int onePackLength = packLength - 4;
+            // 每包数据内容大小为 20
             int onePackLength = packLength;
             // 最后一包不足长度不会自动补零
             if (!lastPackComplete) {
-//                onePackLength = (availableLength >= (packLength - 6) ? (packLength - 6) : availableLength);
-//                onePackLength = (availableLength >= (packLength - 4) ? (packLength - 4) : availableLength);
                 onePackLength = (availableLength >= packLength) ? packLength : availableLength;
             }
 
@@ -754,15 +671,10 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 //            txBuffer[19] = BFrameConst.FRAME_END;
 
             byte[] msgIdByte;
-            byte[] packageCountByte;
-//            byte[] msgStartIdByte;
             if (isMsgStart) {
 
                 // 数据包 [1]-[4] 为 msgId，起始位的 msgId 为 1，代表只发送头部信息，包含消息分包的个数
-                msgIdByte = int2byte(BFrameConst.START_MSG_ID_START);
-                packageCountByte = int2byte(packageCount);
-//                msgStartIdByte = int2byte(msgType);
-
+                msgIdByte = ByteUtil.int2byte(BFrameConst.START_MSG_ID_START);
 
                 /**
                  * 首包数组拷贝
@@ -772,12 +684,8 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                  * 目标数组的开始起始位置
                  * 要 copy 的数组的长度
                  */
-//                System.arraycopy(msgIdByte, 0, txBuffer, 1, BFrameConst.MESSAGE_ID_LENGTH);
-//                System.arraycopy(packageCountByte, 0, txBuffer, 5, BFrameConst.MESSAGE_ID_LENGTH);
-//                System.arraycopy(msgStartIdByte, 0, txBuffer, 9, BFrameConst.MESSAGE_ID_LENGTH);
-                System.arraycopy(msgIdByte, 0, txBuffer, 0, BFrameConst.MESSAGE_ID_LENGTH);
-                System.arraycopy(packageCountByte, 0, txBuffer, 4, BFrameConst.MESSAGE_ID_LENGTH);
-//                System.arraycopy(msgStartIdByte, 0, txBuffer, 8, BFrameConst.MESSAGE_ID_LENGTH);
+                // 首位 0x00，2-4 msgType，5-8 packageCount
+                System.arraycopy(data, 0, txBuffer, 0, 9);
 
                 // 单个数据包发送
                 boolean result = write(txBuffer);
@@ -786,44 +694,16 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 //                    isWritingEntity = false;
 //                }
 
-                // 将是否为首包置为false，后面的开始发正式数据
+                // 将是否为首包置为 false，后面的开始发正式数据
                 isMsgStart = false;
 
             } else {
 
-                // 数据包 [1]-[4] 为 msgId
-//                msgIdByte = int2byte(msg_id);
-//                L.i("msgId = " + msg_id);
-//                // TODO: 2019/12/2 应该在收到 Server 回调的时候，做递增
-//                msg_id++;
-
-
-                /**
-                 * 数组拷贝
-                 * 原数组
-                 * 元数据的起始位置
-                 * 目标数组
-                 * 目标数组的开始起始位置
-                 * 要 copy 的数组的长度
-                 */
-//                System.arraycopy(msgIdByte, 0, txBuffer, 1, BFrameConst.MESSAGE_ID_LENGTH);
-                // 2019/12/11 只有首包才传msgId，内容包不传 msg_id 了
-//                System.arraycopy(msgIdByte, 0, txBuffer, 0, BFrameConst.MESSAGE_ID_LENGTH);
-
-                // 数据包 [5]-[18] 为内容
-//                for (int i = 4; i < onePackLength + 4; i++) {
-//                    if (index < dataLength) {
-//                        txBuffer[i] = data[index++];
-//                    }
-//                }
                 for (int i = 0; i < onePackLength; i++) {
                     if (index < dataLength) {
                         txBuffer[i] = data[index++];
                     }
                 }
-//                L.i("index = " + index);
-//                L.i("onePackLength = " + onePackLength);
-//                L.i("dataLength = " + dataLength);
 
                 // 更新剩余数据长度
                 availableLength -= onePackLength;
@@ -858,69 +738,6 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
     }
 
-    public static int byteArrayToInt(byte[] b) {
-        byte[] a = new byte[4];
-        int i = a.length - 1, j = b.length - 1;
-        for (; i >= 0; i--, j--) {//从b的尾部(即int值的低位)开始copy数据
-            if (j >= 0)
-                a[i] = b[j];
-            else
-                a[i] = 0;//如果b.length不足4,则将高位补0
-        }
-        int v0 = (a[0] & 0xff) << 24;//&0xff将byte值无差异转成int,避免Java自动类型提升后,会保留高位的符号位
-        int v1 = (a[1] & 0xff) << 16;
-        int v2 = (a[2] & 0xff) << 8;
-        int v3 = (a[3] & 0xff);
-        return v0 + v1 + v2 + v3;
-    }
-
-    public static byte[] prepareOutFrame(int msgid, byte frametype, String msg) {
-        //512  1024  2048  4096  12288
-        int buffer_size = msg.getBytes().length + 10;
-        byte[] utf8StringContent;
-        byte[] frame = new byte[buffer_size];
-        frame[0] = BFrameConst.FRAME_HEAD; //(byte)0xFF
-        frame[4] = frametype;
-        //5-8
-        //消息id
-        byte[] msgIdByte = int2byte(msgid);
-        //MESSAGE_ID_LENGTH=4
-
-        //content
-        L.d("prepareOutFrame  msgid : " + msgid);
-        L.d("prepareOutFrame  frametype : " + frametype);
-        L.d("prepareOutFrame  msg : " + msg);
-        try {
-            utf8StringContent = msg.getBytes("utf-8");
-
-            /**
-             * 原数组
-             * 元数据的起始位置
-             * 目标数组
-             * 目标数组的开始起始位置
-             * 要 copy 的数组的长度
-             */
-            System.arraycopy(msgIdByte, 0, frame, 5, BFrameConst.MESSAGE_ID_LENGTH);
-            System.arraycopy(utf8StringContent, 0, frame, 9, utf8StringContent.length);
-        } catch (UnsupportedEncodingException e) {
-            L.d("UnsupportedEncodingException  " + e.toString());
-            e.printStackTrace();
-            // return;
-        }
-        frame[buffer_size - 1] = BFrameConst.FRAME_END;//(byte)0x00;
-        return frame;
-
-    }
-
-    public static byte[] int2byte(int res) {
-        byte[] targets = new byte[4];
-
-        targets[3] = (byte) (res & 0xff);// 最低位
-        targets[2] = (byte) ((res >> 8) & 0xff);// 次低位
-        targets[1] = (byte) ((res >> 16) & 0xff);// 次高位
-        targets[0] = (byte) (res >>> 24);// 最高位,无符号右移。
-        return targets;
-    }
 
     /**
      * 写特征
@@ -930,7 +747,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
     private boolean write(byte[] data) {
         boolean result = false;
         if (mBluetoothGatt != null && mCharacteristic != null) {
-            L.i("开始写 uuid：" + mCharacteristic.getUuid().toString() + " hex:" + byte2HexStr(data) + " str:" + new String(data));
+            L.i("开始写 uuid：" + mCharacteristic.getUuid().toString() + " hex:" + ByteUtil.byte2HexStr(data) + " str:" + new String(data));
 
             mCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
 //            mCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
@@ -1136,13 +953,13 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
             switch (msg.what) {
 
-                case BFrameConst.START_MSG_ID_UNIQUE:
+                case BFrameConst.START_MSG_ID_TOKEN:
 
                     /**
                      * 发送 TOKEN
                      * 第一个参数为发送内容，第二个参数为数据包类型：TOKEN/发送内容
                      */
-                    act.preSubpackageByte((String) msg.obj, BFrameConst.START_MSG_ID_UNIQUE);
+                    act.preSubpackageByte((String) msg.obj, BFrameConst.START_MSG_ID_TOKEN);
                     break;
 
                 case BFrameConst.START_MSG_ID_CONTENT:
@@ -1202,23 +1019,35 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         }
     }
 
-
-    public String byte2HexStr(byte[] value) {
-        char[] chars = "0123456789ABCDEF".toCharArray();
-        StringBuilder sb = new StringBuilder("");
-        int bit;
-
-        for (int i = 0; i < value.length; i++) {
-            bit = (value[i] & 0x0F0) >> 4;
-            sb.append(chars[bit]);
-            bit = value[i] & 0x0F;
-            sb.append(chars[bit]);
-            if (i != value.length - 1) {
-                sb.append('-');
-            }
-
-        }
-        return "(0x) " + sb.toString().trim();
+    private void initEvent() {
+        mBtnScan.setOnClickListener(this);
+        mBtnStopScan.setOnClickListener(this);
+        mBtnConnect.setOnClickListener(this);
+        mBtnDisconnect.setOnClickListener(this);
+        mBtnRead.setOnClickListener(this);
+        mBtnWrite.setOnClickListener(this);
+        mBtnNotify.setOnClickListener(this);
+        mBtnDisableNotify.setOnClickListener(this);
     }
+
+    private void initView() {
+        mBtnScan = findViewById(R.id.btn_scan);
+        mBtnStopScan = findViewById(R.id.btn_stop_scan);
+        mBtnConnect = findViewById(R.id.btn_connect);
+        mBtnDisconnect = findViewById(R.id.btn_disconnect);
+        mBtnRead = findViewById(R.id.btn_read);
+        mBtnWrite = findViewById(R.id.btn_write);
+        mBtnNotify = findViewById(R.id.btn_notify);
+        mBtnDisableNotify = findViewById(R.id.btn_disable_notify);
+        mTvScanState = findViewById(R.id.tv_scan_state);
+        mTvConnState = findViewById(R.id.tv_connect_state);
+        mTvReadData = findViewById(R.id.tv_read_data);
+        mTvWriteData = findViewById(R.id.tv_write_data);
+        mTvNotifyData = findViewById(R.id.tv_notify_data);
+        mEtWrite = findViewById(R.id.et_write);
+    }
+
+
+
 
 }
