@@ -305,8 +305,15 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
                 //开启notify之后，我们就可以在这里接收数据了。
                 L.i("onCharacteristicChanged value:" + ByteUtil.byte2HexStr(characteristic.getValue()));
-                // TODO: 2019/12/2 收到回调，可以传下一个数据包
-                MainActivity.this.isWritingEntity = true;
+
+                // TODO: 2019/12/13 判断是否是接收 Server 端给主设备的回调，如果是，则需要继续发送数据包，否则做接收消息操作
+                if ((byte) 0xFF == characteristic.getValue()[0]
+                    && (byte) 0xFF == characteristic.getValue()[1]) {
+                    // 2019/12/2 收到回调，可以传下一个数据包
+                    MainActivity.this.isWritingEntity = true;
+                } else {
+                    // TODO: 2019/12/13 接收并处理包数据
+                }
 
             }
 
@@ -403,7 +410,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                 // 给 Handler 传参数，准备预分包，即字符串转 byte[]
                 Message msgSendContent = mHandler.obtainMessage();
                 // 数据包类型
-                msgSendContent.what = BFrameConst.START_MSG_ID_CONTENT;
+                msgSendContent.what = BFrameConst.START_MSG_ID_CENTRAL;
                 msgSendContent.obj = contentStr;
                 mHandler.sendMessage(msgSendContent);
                 break;
@@ -962,13 +969,13 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                     act.preSubpackageByte((String) msg.obj, BFrameConst.START_MSG_ID_TOKEN);
                     break;
 
-                case BFrameConst.START_MSG_ID_CONTENT:
+                case BFrameConst.START_MSG_ID_CENTRAL:
 
                     /**
                      * 发送实际内容
                      * 第一个参数为发送内容，第二个参数为数据包类型：TOKEN/发送内容
                      */
-                    act.preSubpackageByte((String) msg.obj, BFrameConst.START_MSG_ID_CONTENT);
+                    act.preSubpackageByte((String) msg.obj, BFrameConst.START_MSG_ID_CENTRAL);
                     break;
 
 //                case SHOW_LOADING: // 需要显示 Loading
