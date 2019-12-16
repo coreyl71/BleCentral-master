@@ -53,6 +53,7 @@ import cc.noharry.bleexample.ContentValue.BFrameConst;
 import cc.noharry.bleexample.utils.AssetsUtil;
 import cc.noharry.bleexample.utils.ByteUtil;
 import cc.noharry.bleexample.utils.ClsUtils;
+import cc.noharry.bleexample.utils.DecimalFormatUtil;
 import cc.noharry.bleexample.utils.L;
 import cc.noharry.bleexample.utils.LogUtil;
 import io.netty.buffer.ByteBuf;
@@ -85,6 +86,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
     private TextView mTvReadData;
     private TextView mTvWriteData;
     private TextView mTvNotifyData;
+    private TextView tv_receive_count, tv_total_count, tv_count_percent_show;
     private EditText mEtWrite;
     private AtomicBoolean isScanning = new AtomicBoolean(false);
     /**
@@ -427,6 +429,19 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         // 添加接收到的 byte 数组到 list 中，接收完成之后做拼接
 //        this.contentBytesServer.add(contentByte);
         contentBytesServer.add(contentByte);
+
+        // TODO: 2019/12/16  格式化显示进度
+        double percent = contentBytesServer.size() / totalCount;
+        String percentFormat = DecimalFormatUtil.formatPriceNAmount("2", String.valueOf(percent));
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                tv_receive_count.setText(contentBytesServer.size() + "");
+                tv_total_count.setText(totalCount + "");
+                tv_count_percent_show.setText(percentFormat + "%");
+            }
+        });
+
 
         // 读到定义的数据包末尾，代表数据已经传输完毕
         if (contentByte[contentByte.length - 1] == (byte) 0x00) {
@@ -1261,6 +1276,11 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         mTvWriteData = findViewById(R.id.tv_write_data);
         mTvNotifyData = findViewById(R.id.tv_notify_data);
         mEtWrite = findViewById(R.id.et_write);
+
+        tv_receive_count = findViewById(R.id.tv_receive_count);
+        tv_total_count = findViewById(R.id.tv_total_count);
+        tv_count_percent_show = findViewById(R.id.tv_count_percent_show);
+
     }
 
 
