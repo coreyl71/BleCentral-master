@@ -54,6 +54,7 @@ import cc.noharry.bleexample.utils.AssetsUtil;
 import cc.noharry.bleexample.utils.ByteUtil;
 import cc.noharry.bleexample.utils.ClsUtils;
 import cc.noharry.bleexample.utils.L;
+import cc.noharry.bleexample.utils.LogUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
@@ -150,6 +151,16 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
         // 实例化 MyHandler
         mHandler = new MyHandler(this);
+
+        // 初始化消息类型
+        msgType = -1;
+
+        // 初始化消息数据包的列表
+        if (null == contentBytesServer) {
+            contentBytesServer = new ArrayList<>();
+        } else {
+            contentBytesServer.clear();
+        }
 
         // 找控件
         initView();
@@ -263,13 +274,16 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                     if (mCharacteristic != null) {
                         L.i("获取到目标特征");
 
+                        // 开启通知
+                        enableNotify();
+
                         // TODO: 2019/12/10 马上将本机唯一标识码作为 token，传给 Server 保存
-                        String contentStr = BFrameConst.TOKEN;
-                        // 给 Handler 传参数，准备预分包，即字符串转 byte[]
-                        Message msgSendContent = mHandler.obtainMessage();
-                        msgSendContent.what = BFrameConst.START_MSG_ID_TOKEN;
-                        msgSendContent.obj = contentStr;
-                        mHandler.sendMessage(msgSendContent);
+//                        String contentStr = BFrameConst.TOKEN;
+//                        // 给 Handler 传参数，准备预分包，即字符串转 byte[]
+//                        Message msgSendContent = mHandler.obtainMessage();
+//                        msgSendContent.what = BFrameConst.START_MSG_ID_TOKEN;
+//                        msgSendContent.obj = contentStr;
+//                        mHandler.sendMessage(msgSendContent);
 
                     }
                 }
@@ -294,8 +308,17 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             public void onCharacteristicWrite(BluetoothGatt gatt,
                                               final BluetoothGattCharacteristic characteristic, final int status) {
                 L.i("onCharacteristicWrite status:" + status + " value:"
-                        + ByteUtil.byte2HexStr(characteristic.getValue()));
-                MainActivity.this.isWritingEntity = true;
+                        + ByteUtil.byte2HexStr(characteristic.getValue()) + "---" + new String(characteristic.getValue()));
+                // TODO: 2019/12/13 判断是否是接收 Server 端给主设备的回调，如果是，则需要继续发送数据包，否则做接收消息操作
+                if ((byte) 0xFF == characteristic.getValue()[0]
+                        && (byte) 0xFF == characteristic.getValue()[1]) {
+                    L.e("onCharacteristicWrite---收到 Server 回调");
+                    // 2019/12/2 收到回调，可以传下一个数据包
+                    MainActivity.this.isWritingEntity = true;
+                } else {
+                    // TODO: 2019/12/13 接收 Server 端主动发送的消息，并处理包数据
+                    L.e("onCharacteristicWrite---收到 Server 主动推送");
+                }
 
             }
 
@@ -303,16 +326,45 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             public void onCharacteristicChanged(BluetoothGatt gatt,
                                                 final BluetoothGattCharacteristic characteristic) {
 
-                //开启notify之后，我们就可以在这里接收数据了。
-                L.i("onCharacteristicChanged value:" + ByteUtil.byte2HexStr(characteristic.getValue()));
+                // 开启 notify 之后，我们就可以在这里接收数据了。
+                L.i("onCharacteristicChanged value:" + ByteUtil.byte2HexStr(characteristic.getValue()) + "---" + new String(characteristic.getValue()));
 
                 // TODO: 2019/12/13 判断是否是接收 Server 端给主设备的回调，如果是，则需要继续发送数据包，否则做接收消息操作
                 if ((byte) 0xFF == characteristic.getValue()[0]
-                    && (byte) 0xFF == characteristic.getValue()[1]) {
+                        && (byte) 0xFF == characteristic.getValue()[1]) {
+                    L.e("onCharacteristicChanged---收到 Server 回调");
                     // 2019/12/2 收到回调，可以传下一个数据包
                     MainActivity.this.isWritingEntity = true;
                 } else {
-                    // TODO: 2019/12/13 接收并处理包数据
+                    // TODO: 2019/12/13 接收 Server 端主动发送的消息，并处理包数据
+                    L.e("onCharacteristicChanged---收到 Server 主动推送");
+                    if ((byte) 0xFF == characteristic.getValue()[0]) {
+
+                        // 开始接收数据，此时为首包
+                        // 用来判断 msgId 的缓存 byte 数组
+                        byte[] msgTypeBytes = new byte[4];
+                        System.arraycopy(characteristic.getValue(), 1, msgTypeBytes, 0, 4);
+
+                        // 获取数据包类型
+                        msgType = ByteUtil.byteArrayToInt(msgTypeBytes);
+                        L.i("start---msgType = " + msgType);
+                        contentBytesServer.clear();
+
+                        // 记录开始时间
+                        startTimeMillis = System.currentTimeMillis();
+
+                        // 首包内代表数据包的个数的 byte 数组
+                        byte[] totalCountByte = new byte[4];
+                        System.arraycopy(characteristic.getValue(), 5, totalCountByte, 0, 4);
+                        // 计算总包个数
+                        totalCount = ByteUtil.byteArrayToInt(totalCountByte);
+                        L.i("start---totalCount = " + totalCount);
+
+                    } else {
+                        // 非首包
+                        onReceiveMsg(msgType, characteristic.getValue());
+                    }
+
                 }
 
             }
@@ -326,9 +378,122 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             @Override
             public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor,
                                           int status) {
+                // 开启通知之后的回调方法
                 L.i("onDescriptorWrite status:" + status + " value:" + ByteUtil.byte2HexStr(descriptor.getValue()));
+
+                // TODO: 2019/12/10 马上将本机唯一标识码作为 token，传给 Server 保存
+                String contentStr = BFrameConst.TOKEN;
+                // 给 Handler 传参数，准备预分包，即字符串转 byte[]
+                Message msgSendContent = mHandler.obtainMessage();
+                msgSendContent.what = BFrameConst.START_MSG_ID_TOKEN;
+                msgSendContent.obj = contentStr;
+                mHandler.sendMessage(msgSendContent);
             }
         };
+    }
+
+    // 接收到 Server 的消息类型
+    private int msgType;
+    // 接收到 Server 的数据包个数
+    private int totalCount;
+    // 获取开始接收消息和接收数据完成的时间
+    private long startTimeMillis, endTimeMillis;
+    /**
+     * 用来保存数据分包的集合
+     */
+    private List<byte[]> contentBytesServer;
+
+    /**
+     * 接收到 Server 端传过来的数据包
+     *
+     * @param msg_type
+     * @param contentByte
+     */
+    private void onReceiveMsg(int msg_type, byte[] contentByte) {
+
+        // 先看 msgType 是否一致，如果不一致则需要先将之前的数据包 list 清空
+//        if (msgType != msg_type) {
+//            // 获取开始时间
+//            startTimeMillis = System.currentTimeMillis();
+//            contentBytesServer.clear();
+//            // 即时刷新数据类型，避免影响下个数据包传过来时的判断
+//            msgType = msg_type;
+//        }
+
+        // 添加接收到的 byte 数组到 list 中，接收完成之后做拼接
+//        this.contentBytesServer.add(contentByte);
+        contentBytesServer.add(contentByte);
+
+        // 读到定义的数据包末尾，代表数据已经传输完毕
+        if (contentByte[contentByte.length - 1] == (byte) 0x00) {
+
+            L.e("onCharacteristicChanged---收到 Server 主动推送---传输完毕");
+
+            // 此种类型的数据包接收完毕，重置数据类型，方便下次传数据的时候判断
+            msgType = -1;
+            // 获取结束时间
+            endTimeMillis = System.currentTimeMillis();
+            L.i("complete---耗时 = " + (endTimeMillis - startTimeMillis) + "ms---" + (endTimeMillis - startTimeMillis) / 1000 + "s");
+
+            /**
+             * 根据数据类型来做后续操作
+             * 普通内容数据之后还要分为用户信息、健康数据、位置信息等
+             */
+            switch (msg_type) {
+
+                case BFrameConst.START_MSG_ID_SERVER:
+                    // Server 端数据包接收完毕
+                    receiveServerMsgCompleted();
+                    break;
+
+                default:
+                    break;
+
+            }
+
+        }
+
+    }
+
+    /**
+     * 接收 Server 普通内容数据包完成
+     */
+    private void receiveServerMsgCompleted() {
+
+        L.i("receiveServerMsgCompleted");
+        if (null != contentBytesServer && contentBytesServer.size() != 0) {
+
+            // 计算总字节长度
+            int contentByteLength = contentBytesServer.size() * 20;
+
+            // 待拼接数组，最终用来转换字符串显示
+            byte[] contentBytesConcat = new byte[contentByteLength];
+            for (int i = 0; i < contentBytesServer.size(); i++) {
+                System.arraycopy(contentBytesServer.get(i), 0, contentBytesConcat, i * 20, 20);
+            }
+
+            // 清空之前存储 byte[] 的列表数据
+            contentBytesServer.clear();
+
+            // 转成字符串
+            String finalStr = new String(contentBytesConcat);
+            LogUtil.showLogCompletion("corey", "receiveServerMsgCompleted---finalStr = " + finalStr.trim(), 500);
+
+            // 显示
+            Message msgSendContent = mHandler.obtainMessage();
+            msgSendContent.what = BFrameConst.START_MSG_ID_SERVER_COMPLETE;
+            msgSendContent.obj = finalStr;
+            mHandler.sendMessage(msgSendContent);
+//            runOnUiThread(new Runnable() {
+//                @Override
+//                public void run() {
+//                    mTvNotifyData.setText(finalStr);
+//                }
+//            });
+
+
+        }
+
     }
 
 //    private boolean subPackageOnce(BluetoothBuffer buffer) {
@@ -360,7 +525,6 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 //        }
 //        return false;
 //    }
-
 
 
     private ByteBuf buffer = Unpooled.buffer(1024 * 1000);
@@ -576,6 +740,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
     /**
      * 获取将要发送的文本，并转换为 byte 数组
      * 即将分包
+     *
      * @param data
      * @param msgType 传输数据类型，token/实际数据/
      */
@@ -695,7 +860,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                 System.arraycopy(data, 0, txBuffer, 0, 9);
 
                 // 单个数据包发送
-                boolean result = write(txBuffer);
+                boolean result = writeWithResponse(txBuffer);
 
 //                if (!result) {
 //                    isWritingEntity = false;
@@ -716,7 +881,15 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                 availableLength -= onePackLength;
 
                 // 单个数据包发送
-                boolean result = write(txBuffer);
+                L.e("availableLength = " + availableLength);
+                if (availableLength > 20) {
+                    // 不需要回调
+                    boolean result = writeWithNoResponse(txBuffer);
+                } else {
+                    // 需要回调
+                    boolean result = writeWithResponse(txBuffer);
+                }
+
 
 //                if (!result) {
 //                    isWritingEntity = false;
@@ -748,16 +921,42 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
     /**
      * 写特征
+     * 不需要 Server 回调
      *
      * @param data 最大20byte
      */
-    private boolean write(byte[] data) {
+    private boolean writeWithNoResponse(byte[] data) {
         boolean result = false;
         if (mBluetoothGatt != null && mCharacteristic != null) {
-            L.i("开始写 uuid：" + mCharacteristic.getUuid().toString() + " hex:" + ByteUtil.byte2HexStr(data) + " str:" + new String(data));
+            L.i("writeWithNoResponse---开始写 uuid：" + mCharacteristic.getUuid().toString() + " hex:" + ByteUtil.byte2HexStr(data) + " str:" + new String(data));
 
             mCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
 //            mCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
+
+            mCharacteristic.setValue(data);
+            result = mBluetoothGatt.writeCharacteristic(mCharacteristic);
+
+        } else {
+            L.e("写失败");
+        }
+        return result;
+    }
+
+    /**
+     * 写特征
+     * 需要 Server 回调
+     *
+     * @param data 最大20byte
+     */
+    private boolean writeWithResponse(byte[] data) {
+        boolean result = false;
+        if (mBluetoothGatt != null && mCharacteristic != null) {
+            L.i("writeWithResponse---开始写 uuid：" + mCharacteristic.getUuid().toString() + " hex:" + ByteUtil.byte2HexStr(data) + " str:" + new String(data));
+
+//            mCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
+            mCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
+
+            L.i("writeWithResponse---writeType = " + mCharacteristic.getWriteType());
 
             mCharacteristic.setValue(data);
             result = mBluetoothGatt.writeCharacteristic(mCharacteristic);
@@ -978,6 +1177,12 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                     act.preSubpackageByte((String) msg.obj, BFrameConst.START_MSG_ID_CENTRAL);
                     break;
 
+                case BFrameConst.START_MSG_ID_SERVER_COMPLETE:
+                    // 设置接收结果到界面上
+                    act.mTvNotifyData.setText((String) msg.obj);
+
+                    break;
+
 //                case SHOW_LOADING: // 需要显示 Loading
 //
 //                    // 显示登录 Loading
@@ -1053,8 +1258,6 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         mTvNotifyData = findViewById(R.id.tv_notify_data);
         mEtWrite = findViewById(R.id.et_write);
     }
-
-
 
 
 }

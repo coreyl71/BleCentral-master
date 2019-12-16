@@ -24,6 +24,10 @@ public class BFrameConst {
      * Server 给主设备发送内容包
      */
     public static final int START_MSG_ID_SERVER = 5;
+    /**
+     * Server 给主设备发送内容包完成
+     */
+    public static final int START_MSG_ID_SERVER_COMPLETE = 6;
 
     /**
      * 之后将这里改为本机唯一标识码
