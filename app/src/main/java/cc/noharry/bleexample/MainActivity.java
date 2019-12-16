@@ -348,7 +348,11 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                         // 获取数据包类型
                         msgType = ByteUtil.byteArrayToInt(msgTypeBytes);
                         L.i("start---msgType = " + msgType);
-                        contentBytesServer.clear();
+                        if(null != contentBytesServer) {
+                            contentBytesServer.clear();
+                        } else {
+                            contentBytesServer = new ArrayList<>();
+                        }
 
                         // 记录开始时间
                         startTimeMillis = System.currentTimeMillis();
