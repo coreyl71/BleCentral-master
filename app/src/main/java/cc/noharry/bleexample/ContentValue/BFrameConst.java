@@ -25,9 +25,18 @@ public class BFrameConst {
      */
     public static final int START_MSG_ID_SERVER = 5;
     /**
+     * Server 给主设备正在发送内容包，显示传输进度
+     */
+    public static final int START_MSG_ID_SERVER_SHOW_RECEIVING_PERCENT = 6;
+    /**
      * Server 给主设备发送内容包完成
      */
-    public static final int START_MSG_ID_SERVER_COMPLETE = 6;
+    public static final int START_MSG_ID_SERVER_COMPLETE = 7;
+    /**
+     * Server 给主设备发送内容包完成，显示耗时
+     */
+    public static final int START_MSG_ID_SERVER_COMPLETE_TIME = 8;
+
 
     /**
      * 之后将这里改为本机唯一标识码

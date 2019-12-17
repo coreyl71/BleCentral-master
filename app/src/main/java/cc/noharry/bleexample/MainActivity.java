@@ -31,7 +31,6 @@ import android.support.annotation.RequiresApi;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
-import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -40,16 +39,15 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.io.UnsupportedEncodingException;
 import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import cc.noharry.bleexample.ContentValue.BFrameConst;
+import cc.noharry.bleexample.model.ReceivePercentBean;
 import cc.noharry.bleexample.utils.AssetsUtil;
 import cc.noharry.bleexample.utils.ByteUtil;
 import cc.noharry.bleexample.utils.ClsUtils;
@@ -87,6 +85,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
     private TextView mTvWriteData;
     private TextView mTvNotifyData;
     private TextView tv_receive_count, tv_total_count, tv_count_percent_show;
+    private TextView tv_receive_elapsed_time;
     private EditText mEtWrite;
     private AtomicBoolean isScanning = new AtomicBoolean(false);
     /**
@@ -350,7 +349,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                         // 获取数据包类型
                         msgType = ByteUtil.byteArrayToInt(msgTypeBytes);
                         L.i("start---msgType = " + msgType);
-                        if(null != contentBytesServer) {
+                        if (null != contentBytesServer) {
                             contentBytesServer.clear();
                         } else {
                             contentBytesServer = new ArrayList<>();
@@ -365,6 +364,12 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                         // 计算总包个数
                         totalCount = ByteUtil.byteArrayToInt(totalCountByte);
                         L.i("start---totalCount = " + totalCount);
+
+                        // 连接间隔时间修改
+                        if (Build.VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
+                            mBluetoothGatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH);
+                        }
+                        L.e("接收到首包，修改连接间隔");
 
                     } else {
                         // 非首包
@@ -408,6 +413,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
      * 用来保存数据分包的集合
      */
     private List<byte[]> contentBytesServer;
+    private ReceivePercentBean receivePercentBean = new ReceivePercentBean();
 
     /**
      * 接收到 Server 端传过来的数据包
@@ -431,17 +437,22 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         contentBytesServer.add(contentByte);
 
         // TODO: 2019/12/16  格式化显示进度
-        double percent = contentBytesServer.size() / totalCount;
+        double percent = (double) contentBytesServer.size() * 100 / (double) totalCount;
+        L.i("接收到的数据包个数 = " + contentBytesServer.size());
+        L.i("总个数 = " + totalCount);
+        L.i("percent = " + percent);
         String percentFormat = DecimalFormatUtil.formatPriceNAmount("2", String.valueOf(percent));
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                tv_receive_count.setText(contentBytesServer.size() + "");
-                tv_total_count.setText(totalCount + "");
-                tv_count_percent_show.setText(percentFormat + "%");
-            }
-        });
 
+        // 显示
+        Bundle bundle = new Bundle();
+        receivePercentBean.setReceiveCount(contentBytesServer.size());
+        receivePercentBean.setTotalCount(totalCount);
+        receivePercentBean.setPercent(percentFormat);
+        bundle.putParcelable("data", receivePercentBean);
+        Message msgSendContent = mHandler.obtainMessage();
+        msgSendContent.what = BFrameConst.START_MSG_ID_SERVER_SHOW_RECEIVING_PERCENT;
+        msgSendContent.setData(bundle);
+        mHandler.sendMessage(msgSendContent);
 
         // 读到定义的数据包末尾，代表数据已经传输完毕
         if (contentByte[contentByte.length - 1] == (byte) 0x00) {
@@ -453,6 +464,12 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             // 获取结束时间
             endTimeMillis = System.currentTimeMillis();
             L.i("complete---耗时 = " + (endTimeMillis - startTimeMillis) + "ms---" + (endTimeMillis - startTimeMillis) / 1000 + "s");
+
+            // 连接间隔时间修改
+            if (Build.VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
+                mBluetoothGatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_BALANCED);
+            }
+            L.e("接收完成，修改连接间隔");
 
             /**
              * 根据数据类型来做后续操作
@@ -503,13 +520,11 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             msgSendContent.what = BFrameConst.START_MSG_ID_SERVER_COMPLETE;
             msgSendContent.obj = finalStr;
             mHandler.sendMessage(msgSendContent);
-//            runOnUiThread(new Runnable() {
-//                @Override
-//                public void run() {
-//                    mTvNotifyData.setText(finalStr);
-//                }
-//            });
 
+            Message msgReceiveComplete = mHandler.obtainMessage();
+            msgReceiveComplete.what = BFrameConst.START_MSG_ID_SERVER_COMPLETE_TIME;
+            msgReceiveComplete.obj = (endTimeMillis - startTimeMillis) / 1000 + "s";
+            mHandler.sendMessage(msgReceiveComplete);
 
         }
 
@@ -1199,7 +1214,22 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                 case BFrameConst.START_MSG_ID_SERVER_COMPLETE:
                     // 设置接收结果到界面上
                     act.mTvNotifyData.setText((String) msg.obj);
+                    break;
 
+                case BFrameConst.START_MSG_ID_SERVER_COMPLETE_TIME:
+                    // 显示耗时到界面上
+                    act.tv_receive_elapsed_time.setText((String) msg.obj);
+                    break;
+
+                case BFrameConst.START_MSG_ID_SERVER_SHOW_RECEIVING_PERCENT:
+                    // 设置传输进度到界面上
+                    ReceivePercentBean bean = msg.getData().getParcelable("data");
+                    L.i("receivingCount = " + bean.getReceiveCount());
+                    L.i("totalCount = " + bean.getTotalCount());
+                    L.i("percent = " + bean.getPercent());
+                    act.tv_receive_count.setText(bean.getReceiveCount() + "");
+                    act.tv_total_count.setText(bean.getTotalCount() + "");
+                    act.tv_count_percent_show.setText(bean.getPercent() + "%");
                     break;
 
 //                case SHOW_LOADING: // 需要显示 Loading
@@ -1280,6 +1310,8 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         tv_receive_count = findViewById(R.id.tv_receive_count);
         tv_total_count = findViewById(R.id.tv_total_count);
         tv_count_percent_show = findViewById(R.id.tv_count_percent_show);
+
+        tv_receive_elapsed_time = findViewById(R.id.tv_receive_elapsed_time);
 
     }
 
