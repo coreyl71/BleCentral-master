@@ -108,7 +108,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
      * 蓝牙设备的名称
      */
 //    private static final String BLE_DEVICE_NAME = "LIF_BLE";
-    private static final String BLE_DEVICE_NAME = "Corey_MI5S_S1";
+    private static final String BLE_DEVICE_NAME = "Corey_MI5S_S2";
 
     /**
      * 数据分包相关参数
@@ -192,6 +192,11 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
     @SuppressLint("NewApi")
     private void initCallback() {
+
+        /**
+         * 扫描结果返回
+         * 兼容版本
+         */
         mScanCallback = new ScanCallback() {
             @Override
             public void onScanResult(int callbackType, ScanResult result) {
@@ -212,6 +217,11 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                 }
             }
         };
+
+        /**
+         * 扫描结果返回
+         * 目前使用
+         */
         mLeScanCallback = new LeScanCallback() {
             @Override
             public void onLeScan(BluetoothDevice device, int rssi, byte[] scanRecord) {
@@ -229,6 +239,10 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                 }
             }
         };
+
+        /**
+         * Gatt 相关回调
+         */
         mBluetoothGattCallback = new BluetoothGattCallback() {
             @Override
             public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
@@ -246,6 +260,13 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                 } else if (newState == BluetoothProfile.STATE_CONNECTED) {
                     L.i("STATE_CONNECTED");
                     L.i("start discoverServices");
+
+                    // 更改 MTU 大小
+//                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+//                        int mtu = 185;
+//                        L.e("request " + mtu + " mtu:" + mBluetoothGatt.requestMtu(mtu));
+//                    }
+
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
@@ -255,10 +276,6 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
                     // 发现目标特征
                     gatt.discoverServices();
-                    // 增加 MTU 容量，不建议使用，依然采用分包的方式
-//                    if (Build.VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
-//                        gatt.requestMtu(5120);
-//                    }
 
                 } else {
                     mTvConnState.setText(newState);
