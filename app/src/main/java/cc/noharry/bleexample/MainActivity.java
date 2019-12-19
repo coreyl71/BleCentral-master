@@ -118,7 +118,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
     // 最后一包是否自动补零
     private final boolean lastPackComplete = false;
     // 每个包固定长度 20，包括头、尾、msgId
-    private int packLength = 20;
+    private int packLength = BFrameConst.MTU3;
     // 给每个数据分包一个消息 ID，递增
     int msgId;
 
@@ -261,12 +261,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                     L.i("STATE_CONNECTED");
                     L.i("start discoverServices");
 
-                    // 更改 MTU 大小
-//                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-//                        int mtu = 185;
-//                        L.e("request " + mtu + " mtu:" + mBluetoothGatt.requestMtu(mtu));
-//                    }
-
+                    // 主界面显示为 “已连接”
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
@@ -274,7 +269,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                         }
                     });
 
-                    // 发现目标特征
+                    // 连接成功，开始搜索服务
                     gatt.discoverServices();
 
                 } else {
@@ -292,19 +287,24 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                     if (mCharacteristic != null) {
                         L.i("获取到目标特征");
 
-                        // 开启通知
-                        enableNotify();
-
-                        // TODO: 2019/12/10 马上将本机唯一标识码作为 token，传给 Server 保存
-//                        String contentStr = BFrameConst.TOKEN;
-//                        // 给 Handler 传参数，准备预分包，即字符串转 byte[]
-//                        Message msgSendContent = mHandler.obtainMessage();
-//                        msgSendContent.what = BFrameConst.START_MSG_ID_TOKEN;
-//                        msgSendContent.obj = contentStr;
-//                        mHandler.sendMessage(msgSendContent);
+                        // TODO: 2019/12/19  更改 MTU 大小
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            int mtu = BFrameConst.MTU;
+                            L.e("request " + mtu + " mtu:" + mBluetoothGatt.requestMtu(mtu));
+                        }
 
                     }
                 }
+            }
+
+            @Override
+            public void onMtuChanged(BluetoothGatt gatt, int mtu, int status) {
+                super.onMtuChanged(gatt, mtu, status);
+                L.e("onMtuChanged---mtu = " + mtu + "---status = " + status);
+
+                // 开启通知
+                enableNotify();
+
             }
 
             @Override
@@ -416,6 +416,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                 msgSendContent.what = BFrameConst.START_MSG_ID_TOKEN;
                 msgSendContent.obj = contentStr;
                 mHandler.sendMessage(msgSendContent);
+
             }
         };
     }
@@ -517,12 +518,13 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         if (null != contentBytesServer && contentBytesServer.size() != 0) {
 
             // 计算总字节长度
-            int contentByteLength = contentBytesServer.size() * 20;
+            int contentByteLength = (contentBytesServer.size() - 1) * BFrameConst.MTU3
+                    + contentBytesServer.get(contentBytesServer.size() - 1).length;
 
             // 待拼接数组，最终用来转换字符串显示
             byte[] contentBytesConcat = new byte[contentByteLength];
             for (int i = 0; i < contentBytesServer.size(); i++) {
-                System.arraycopy(contentBytesServer.get(i), 0, contentBytesConcat, i * 20, 20);
+                System.arraycopy(contentBytesServer.get(i), 0, contentBytesConcat, i * BFrameConst.MTU3, contentBytesServer.get(i).length);
             }
 
             // 清空之前存储 byte[] 的列表数据
@@ -546,39 +548,6 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         }
 
     }
-
-//    private boolean subPackageOnce(BluetoothBuffer buffer) {
-//        if (null == buffer) return false;
-//        if (buffer.getBufferSize() >= 14) {
-//            byte[] rawBuffer =  buffer.getBuffer();
-//            //求包长
-//            if (isHead(rawBuffer)){
-//                pkgSize = byteToInt(rawBuffer[2], rawBuffer[3]);
-//            }else {
-//                pkgSize = -1;
-//                for (int i = 0; i < rawBuffer.length-1; ++i){
-//                    if (rawBuffer[i] == -2 && rawBuffer[i+1] == 1){
-//                        buffer.releaseFrontBuffer(i);
-//                        return true;
-//                    }
-//                }
-//                return false;
-//            }
-//            //剥离数据
-//            if (pkgSize > 0 && pkgSize <= buffer.getBufferSize()) {
-//                byte[] bufferData = buffer.getFrontBuffer(pkgSize);
-//                long time = System.currentTimeMillis();
-//                buffer.releaseFrontBuffer(pkgSize);
-//                //在这处理数据
-////                deal something。。。。。
-//                return true;
-//            }
-//        }
-//        return false;
-//    }
-
-
-    private ByteBuf buffer = Unpooled.buffer(1024 * 1000);
 
     @RequiresApi(api = VERSION_CODES.KITKAT)
     @Override
@@ -810,7 +779,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
         byte[] msgStartIdByte = ByteUtil.int2byte(msgType);
         System.arraycopy(msgStartIdByte, 0, dataFinalBytes, 1, BFrameConst.MESSAGE_ID_LENGTH);
         // 再放总包长度
-        int msgPackageCount = ((dataLength % 20 == 0) ? (dataLength / 20) : (dataLength / 20 + 1));
+        int msgPackageCount = ((dataLength % BFrameConst.MTU3 == 0) ? (dataLength / BFrameConst.MTU3) : (dataLength / BFrameConst.MTU3 + 1));
         byte[] msgPackageCountByte = ByteUtil.int2byte(msgPackageCount);
         System.arraycopy(msgPackageCountByte, 0, dataFinalBytes, 5, BFrameConst.MESSAGE_ID_LENGTH);
         // 中间放传输内容
@@ -850,6 +819,8 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
         while (index < dataLength) {
 
+            L.e("while 循环");
+
             // 未就绪，可能没收到返回，或未成功写入
             if (!isWritingEntity) {
 
@@ -858,7 +829,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
                     L.e("等待分包");
                     try {
-                        Thread.sleep(20L);
+                        Thread.sleep(200L);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -877,16 +848,13 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             // 开始分包，状态置为未就绪状态
             isWritingEntity = false;
 
-            // 每包数据内容大小为 20
-            int onePackLength = packLength;
-            // 最后一包不足长度不会自动补零
-            if (!lastPackComplete) {
-                onePackLength = (availableLength >= packLength) ? packLength : availableLength;
-            }
+            // 每包数据内容大小初始化为 MTU 大小
+            int onePackLength;
 
-            // 实例化一个数据分包，长度为 20
+
+            // 实例化一个数据分包，长度为计算的包长度
 //            byte[] txBuffer = new byte[onePackLength];
-            byte[] txBuffer = new byte[packLength];
+//            byte[] txBuffer = new byte[packLength];
 
             // 数据包头 (byte)0xFF
 //            txBuffer[0] = BFrameConst.FRAME_HEAD;
@@ -908,7 +876,15 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                  * 要 copy 的数组的长度
                  */
                 // 首位 0x00，2-4 msgType，5-8 packageCount
-                System.arraycopy(data, 0, txBuffer, 0, 9);
+                onePackLength = 9;
+
+                // 实例化一个数据分包，长度为计算的包长度
+                byte[] txBuffer = new byte[onePackLength];
+                L.e("首包---onePackLength = " + onePackLength);
+                System.arraycopy(data, 0, txBuffer, 0, onePackLength);
+
+                // 更新剩余数据长度
+                availableLength -= onePackLength;
 
                 // 单个数据包发送
                 boolean result = writeWithResponse(txBuffer);
@@ -922,6 +898,14 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
             } else {
 
+                // 最后一包不足长度不会自动补零
+                if (!lastPackComplete) {
+                    onePackLength = (availableLength >= packLength) ? packLength : availableLength;
+                }
+                // 实例化一个数据分包，长度为计算的包长度
+                byte[] txBuffer = new byte[onePackLength];
+
+                L.e("非首包---onePackLength = " + onePackLength);
                 for (int i = 0; i < onePackLength; i++) {
                     if (index < dataLength) {
                         txBuffer[i] = data[index++];
@@ -933,7 +917,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
                 // 单个数据包发送
                 L.e("availableLength = " + availableLength);
-                if (availableLength > 20) {
+                if (availableLength > BFrameConst.MTU3) {
                     // 不需要回调
                     boolean result = writeWithNoResponse(txBuffer);
                 } else {
